@@ -4,9 +4,11 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import LoginForm from '@/components/auth/LoginForm';
 import RegisterForm from '@/components/auth/RegisterForm';
+import ChildLoginForm from '@/components/auth/ChildLoginForm';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 const LoginPage: React.FC = () => {
-  const [isLoginView, setIsLoginView] = useState(true);
+  const [activeTab, setActiveTab] = useState("parent-login");
   const { user } = useAuth();
   const navigate = useNavigate();
   
@@ -17,8 +19,8 @@ const LoginPage: React.FC = () => {
     return null;
   }
   
-  const toggleForm = () => {
-    setIsLoginView(!isLoginView);
+  const handleTabChange = (value: string) => {
+    setActiveTab(value);
   };
   
   return (
@@ -64,11 +66,36 @@ const LoginPage: React.FC = () => {
         
         {/* Right side - login/register form */}
         <div className="w-full md:w-1/2 bg-background p-8 md:p-12 flex items-center justify-center">
-          {isLoginView ? (
-            <LoginForm onToggleForm={toggleForm} />
-          ) : (
-            <RegisterForm onToggleForm={toggleForm} />
-          )}
+          <div className="w-full max-w-md">
+            <Tabs defaultValue="parent-login" value={activeTab} onValueChange={handleTabChange} className="w-full">
+              <TabsList className="grid w-full grid-cols-2 mb-8">
+                <TabsTrigger value="parent-login">Parents</TabsTrigger>
+                <TabsTrigger value="child-login">Children</TabsTrigger>
+              </TabsList>
+              
+              <TabsContent value="parent-login">
+                {activeTab === "parent-login" && (
+                  activeTab === "parent-login" ? (
+                    <LoginForm onToggleForm={() => setActiveTab("parent-register")} />
+                  ) : (
+                    <RegisterForm onToggleForm={() => setActiveTab("parent-login")} />
+                  )
+                )}
+              </TabsContent>
+              
+              <TabsContent value="parent-register">
+                {activeTab === "parent-register" && (
+                  <RegisterForm onToggleForm={() => setActiveTab("parent-login")} />
+                )}
+              </TabsContent>
+              
+              <TabsContent value="child-login">
+                {activeTab === "child-login" && (
+                  <ChildLoginForm onToggleForm={() => setActiveTab("parent-login")} />
+                )}
+              </TabsContent>
+            </Tabs>
+          </div>
         </div>
       </main>
     </div>

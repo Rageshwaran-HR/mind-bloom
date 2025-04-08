@@ -1,9 +1,9 @@
-
 import { User, ChildUser, ParentUser, GameResult, DailyChallenge, LeaderboardEntry, GameLevel, GameType, EmotionScore } from './types';
 import { v4 as uuidv4 } from 'uuid';
 
 // Mock in-memory database for development
 const users: User[] = [];
+const childCredentials: Map<string, {username: string, password: string}> = new Map();
 const gameResults: GameResult[] = [];
 const dailyChallenges: DailyChallenge[] = [];
 
@@ -62,15 +62,38 @@ export const db = {
     
     return user;
   },
+
+  childLogin: async (username: string, password: string): Promise<ChildUser> => {
+    // Find child with matching username
+    const childUser = users.find(u => !u.isParent) as ChildUser | undefined;
+    if (!childUser) {
+      throw new Error('Child not found');
+    }
+
+    // Verify credentials
+    const credentials = childCredentials.get(childUser.id);
+    if (!credentials || credentials.username !== username || credentials.password !== password) {
+      throw new Error('Invalid credentials');
+    }
+    
+    return childUser;
+  },
   
-  createChild: async (parentId: string, name: string, avatarId: number): Promise<ChildUser> => {
+  createChild: async (parentId: string, name: string, avatarId: number, username: string, password: string): Promise<ChildUser> => {
     const parent = users.find(u => u.id === parentId && u.isParent) as ParentUser | undefined;
     if (!parent) {
       throw new Error('Parent not found');
     }
     
+    // Check if username is already taken
+    const existingCredentials = Array.from(childCredentials.values());
+    if (existingCredentials.some(cred => cred.username === username)) {
+      throw new Error('Username already taken');
+    }
+    
+    const childId = uuidv4();
     const childUser: ChildUser = {
-      id: uuidv4(),
+      id: childId,
       email: `${name.toLowerCase()}_${Date.now()}@child.mindbloom.com`,
       isParent: false,
       name,
@@ -78,7 +101,11 @@ export const db = {
       avatarId,
       streakDays: 0,
       createdAt: new Date().toISOString(),
+      username
     };
+    
+    // Store the child's credentials
+    childCredentials.set(childId, { username, password });
     
     users.push(childUser);
     parent.children.push(childUser);

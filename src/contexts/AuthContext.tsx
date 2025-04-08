@@ -1,3 +1,4 @@
+
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { User, ParentUser, ChildUser } from '@/lib/types';
 import { db } from '@/lib/mockDatabase';
@@ -10,8 +11,9 @@ interface AuthContextType {
   parentUser: ParentUser | null;
   childUser: ChildUser | null;
   login: (email: string, password: string) => Promise<void>;
+  childLogin: (username: string, password: string) => Promise<void>;
   registerParent: (email: string, password: string, name: string) => Promise<void>;
-  registerChild: (name: string, avatarId: number) => Promise<void>;
+  registerChild: (name: string, avatarId: number, username: string, password: string) => Promise<void>;
   logout: () => void;
   switchToChild: (childId: string) => Promise<void>;
   switchToParent: () => Promise<void>;
@@ -90,6 +92,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setIsLoading(false);
     }
   };
+
+  const childLogin = async (username: string, password: string) => {
+    setIsLoading(true);
+    try {
+      const loggedInChild = await db.childLogin(username, password);
+      saveUserToStorage(loggedInChild);
+      await loadUser(loggedInChild.id, false);
+      toast.success('Login successful!');
+    } catch (error) {
+      console.error('Child login error:', error);
+      toast.error('Login failed. Please check your credentials.');
+      throw error;
+    } finally {
+      setIsLoading(false);
+    }
+  };
   
   const registerParent = async (email: string, password: string, name: string) => {
     setIsLoading(true);
@@ -109,7 +127,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
   
-  const registerChild = async (name: string, avatarId: number) => {
+  const registerChild = async (name: string, avatarId: number, username: string, password: string) => {
     if (!parentUser) {
       toast.error('Parent account required');
       return;
@@ -117,7 +135,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     
     setIsLoading(true);
     try {
-      const newChild = await db.createChild(parentUser.id, name, avatarId);
+      const newChild = await db.createChild(parentUser.id, name, avatarId, username, password);
       toast.success(`Added ${name}'s profile!`);
       
       const refreshedParent = await db.getParent(parentUser.id);
@@ -182,6 +200,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         parentUser,
         childUser, 
         login,
+        childLogin,
         registerParent,
         registerChild,
         logout,

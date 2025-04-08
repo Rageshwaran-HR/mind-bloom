@@ -1,4 +1,3 @@
-
 // User types
 export interface User {
   id: string;
@@ -13,6 +12,7 @@ export interface ChildUser extends User {
   avatarId: number;
   streakDays: number;
   lastPlayDate?: string;
+  username?: string; // Added username for child login
 }
 
 export interface ParentUser extends User {

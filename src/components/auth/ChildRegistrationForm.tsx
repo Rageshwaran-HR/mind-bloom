@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -10,6 +11,9 @@ const avatars = [1, 2, 3, 4, 5, 6];
 
 const ChildRegistrationForm: React.FC<{ onSuccess?: () => void }> = ({ onSuccess }) => {
   const [name, setName] = useState('');
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [selectedAvatar, setSelectedAvatar] = useState<number>(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
   
@@ -18,16 +22,29 @@ const ChildRegistrationForm: React.FC<{ onSuccess?: () => void }> = ({ onSuccess
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!name) {
-      toast.error('Please enter a name');
+    if (!name || !username || !password) {
+      toast.error('Please fill in all required fields');
+      return;
+    }
+
+    if (password !== confirmPassword) {
+      toast.error('Passwords do not match');
+      return;
+    }
+    
+    if (password.length < 6) {
+      toast.error('Password must be at least 6 characters long');
       return;
     }
     
     setIsSubmitting(true);
     
     try {
-      await registerChild(name, selectedAvatar);
+      await registerChild(name, selectedAvatar, username, password);
       setName('');
+      setUsername('');
+      setPassword('');
+      setConfirmPassword('');
       if (onSuccess) {
         onSuccess();
       }
@@ -55,6 +72,41 @@ const ChildRegistrationForm: React.FC<{ onSuccess?: () => void }> = ({ onSuccess
               placeholder="Jane" 
               value={name}
               onChange={(e) => setName(e.target.value)}
+              required 
+            />
+          </div>
+          
+          <div className="space-y-2">
+            <Label htmlFor="username">Username</Label>
+            <Input 
+              id="username" 
+              placeholder="jane123" 
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              required 
+            />
+          </div>
+          
+          <div className="space-y-2">
+            <Label htmlFor="password">Password</Label>
+            <Input 
+              id="password" 
+              type="password" 
+              placeholder="••••••••" 
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required 
+            />
+          </div>
+          
+          <div className="space-y-2">
+            <Label htmlFor="confirmPassword">Confirm Password</Label>
+            <Input 
+              id="confirmPassword" 
+              type="password" 
+              placeholder="••••••••" 
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
               required 
             />
           </div>
