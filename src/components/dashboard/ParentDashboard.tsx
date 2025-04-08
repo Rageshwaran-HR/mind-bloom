@@ -5,13 +5,16 @@ import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { useAuth } from '@/contexts/AuthContext';
-import { db, avatarOptions } from '@/lib/mockDatabase';
+import { supabase } from '@/integrations/supabase/client';
 import { ChildUser, EmotionScore } from '@/lib/types';
 import { toast } from '@/lib/toast';
 import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, PieChart, Pie, Cell, RadarChart, PolarGrid, PolarAngleAxis, Radar } from 'recharts';
 import ChildRegistrationForm from '../auth/ChildRegistrationForm';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { InfoIcon, Brain, Zap, Smile, Activity, AlertCircle } from 'lucide-react';
+import EmotionTrends from './EmotionTrends';
+import EmotionCards from './EmotionCards';
+import ActivityLog from './ActivityLog';
 
 interface EmotionTrend {
   date: string;
@@ -43,13 +46,37 @@ const ParentDashboard: React.FC = () => {
     
     const fetchData = async () => {
       try {
-        // Fetch emotion trends
-        const trends = await db.getEmotionTrends(selectedChildId);
-        setEmotionTrends(trends);
+        // Fetch emotion trends from database
+        const { data: sentimentData, error: sentimentError } = await supabase
+          .from('sentiment_analysis')
+          .select('*, game_sessions(*)')
+          .eq('child_id', selectedChildId)
+          .order('created_at', { ascending: true });
+          
+        if (sentimentError) throw sentimentError;
         
-        // Fetch sentiment insights
-        const insight = await db.getSentimentInsight(selectedChildId);
-        setSentimentInsight(insight);
+        if (sentimentData) {
+          // Transform sentiment data into emotion trends format
+          const trends = sentimentData.map(item => ({
+            date: item.created_at,
+            emotions: {
+              joy: item.enjoyment_level / 100,
+              frustration: item.frustration_level / 100,
+              engagement: item.persistence_level / 100,
+              focus: item.focus_level / 100,
+              overall: mapOverallSentiment(item.overall_sentiment)
+            }
+          }));
+          
+          setEmotionTrends(trends);
+          
+          // Generate insight from the most recent data
+          if (trends.length > 0) {
+            const recentData = trends[trends.length - 1];
+            const insight = generateSentimentInsight(recentData.emotions, trends);
+            setSentimentInsight(insight);
+          }
+        }
       } catch (error) {
         console.error('Error fetching emotion data:', error);
         toast.error('Failed to load emotion data');
@@ -58,6 +85,72 @@ const ParentDashboard: React.FC = () => {
     
     fetchData();
   }, [selectedChildId]);
+  
+  // Map text sentiment to a number value (-1 to 1)
+  const mapOverallSentiment = (sentiment: string | null): number => {
+    if (!sentiment) return 0;
+    
+    switch (sentiment.toLowerCase()) {
+      case 'positive': return 0.7;
+      case 'negative': return -0.7;
+      case 'neutral': return 0;
+      default: return 0;
+    }
+  };
+  
+  // Generate insight text based on emotional data
+  const generateSentimentInsight = (currentEmotions: EmotionScore, trends: EmotionTrend[]): string => {
+    if (trends.length < 2) {
+      return "Not enough data to generate insights yet. Have your child play more games to see patterns in their emotional state.";
+    }
+    
+    const trendLength = trends.length;
+    const recentTrends = trends.slice(Math.max(0, trendLength - 5), trendLength);
+    
+    // Calculate averages for recent trends
+    const averages = {
+      joy: recentTrends.reduce((sum, t) => sum + t.emotions.joy, 0) / recentTrends.length,
+      frustration: recentTrends.reduce((sum, t) => sum + t.emotions.frustration, 0) / recentTrends.length,
+      engagement: recentTrends.reduce((sum, t) => sum + t.emotions.engagement, 0) / recentTrends.length,
+      focus: recentTrends.reduce((sum, t) => sum + t.emotions.focus, 0) / recentTrends.length,
+      overall: recentTrends.reduce((sum, t) => sum + t.emotions.overall, 0) / recentTrends.length
+    };
+    
+    let insight = "";
+    
+    if (averages.overall > 0.3) {
+      insight = "Your child is showing positive emotional patterns during gameplay. ";
+    } else if (averages.overall < -0.3) {
+      insight = "Your child may be experiencing some challenges during gameplay. ";
+    } else {
+      insight = "Your child is showing balanced emotional patterns during gameplay. ";
+    }
+    
+    // Add specific insights based on emotional indicators
+    if (averages.joy > 0.7) {
+      insight += "They're demonstrating high levels of enjoyment, which suggests the games are providing positive experiences. ";
+    }
+    
+    if (averages.frustration > 0.7) {
+      insight += "They're showing signs of frustration, which might indicate the game difficulty needs adjustment. ";
+    } else if (averages.frustration < 0.3) {
+      insight += "They're managing frustration well, showing good emotional regulation. ";
+    }
+    
+    if (averages.engagement > 0.7) {
+      insight += "Their high engagement levels suggest the games are capturing their interest effectively. ";
+    } else if (averages.engagement < 0.3) {
+      insight += "Their engagement could be improved, perhaps try different game types or activities. ";
+    }
+    
+    if (averages.focus > 0.7) {
+      insight += "They're demonstrating excellent focus abilities during gameplay. ";
+    } else if (averages.focus < 0.3) {
+      insight += "They may benefit from activities that help build focus and concentration skills. ";
+    }
+    
+    return insight;
+  };
   
   const handleChildSelect = (childId: string) => {
     setSelectedChildId(childId);
@@ -99,10 +192,11 @@ const ParentDashboard: React.FC = () => {
     return parentUser.children.find(child => child.id === selectedChildId);
   };
   
-  // Helper function to get avatar URL from avatarId
-  const getAvatarUrl = (avatarId: number) => {
-    const avatar = avatarOptions.find(a => a.id === avatarId);
-    return avatar?.url;
+  // This function returns a string color code based on the overall sentiment value
+  const getSentimentColor = (value: number): string => {
+    if (value > 0.3) return "#34D399"; // Green for positive
+    if (value > -0.3) return "#FCD34D"; // Yellow for neutral
+    return "#F87171"; // Red for negative
   };
   
   if (isLoading) {
@@ -266,159 +360,27 @@ const ParentDashboard: React.FC = () => {
                         </ResponsiveContainer>
                       </div>
                       
-                      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
-                        {emotionTrends.length > 0 && (
-                          <>
-                            <Card>
-                              <CardContent className="pt-6">
-                                <div className="text-center">
-                                  <div className="flex justify-center items-center mb-2">
-                                    <Smile className="w-5 h-5 text-green-500 mr-2" />
-                                    <p className="text-sm font-medium text-muted-foreground">Joy</p>
-                                  </div>
-                                  <p className={`text-2xl font-bold ${
-                                    getScoreColor(emotionTrends[emotionTrends.length - 1].emotions.joy)
-                                  }`}>
-                                    {(emotionTrends[emotionTrends.length - 1].emotions.joy * 100).toFixed(0)}%
-                                  </p>
-                                </div>
-                              </CardContent>
-                            </Card>
-                            
-                            <Card>
-                              <CardContent className="pt-6">
-                                <div className="text-center">
-                                  <div className="flex justify-center items-center mb-2">
-                                    <Zap className="w-5 h-5 text-blue-500 mr-2" />
-                                    <p className="text-sm font-medium text-muted-foreground">Focus</p>
-                                  </div>
-                                  <p className={`text-2xl font-bold ${
-                                    getScoreColor(emotionTrends[emotionTrends.length - 1].emotions.focus)
-                                  }`}>
-                                    {(emotionTrends[emotionTrends.length - 1].emotions.focus * 100).toFixed(0)}%
-                                  </p>
-                                </div>
-                              </CardContent>
-                            </Card>
-                            
-                            <Card>
-                              <CardContent className="pt-6">
-                                <div className="text-center">
-                                  <div className="flex justify-center items-center mb-2">
-                                    <Activity className="w-5 h-5 text-purple-500 mr-2" />
-                                    <p className="text-sm font-medium text-muted-foreground">Engagement</p>
-                                  </div>
-                                  <p className={`text-2xl font-bold ${
-                                    getScoreColor(emotionTrends[emotionTrends.length - 1].emotions.engagement)
-                                  }`}>
-                                    {(emotionTrends[emotionTrends.length - 1].emotions.engagement * 100).toFixed(0)}%
-                                  </p>
-                                </div>
-                              </CardContent>
-                            </Card>
-                            
-                            <Card>
-                              <CardContent className="pt-6">
-                                <div className="text-center">
-                                  <div className="flex justify-center items-center mb-2">
-                                    <AlertCircle className="w-5 h-5 text-orange-500 mr-2" />
-                                    <p className="text-sm font-medium text-muted-foreground">Frustration</p>
-                                  </div>
-                                  <p className={`text-2xl font-bold ${
-                                    getScoreColor(1 - emotionTrends[emotionTrends.length - 1].emotions.frustration)
-                                  }`}>
-                                    {(emotionTrends[emotionTrends.length - 1].emotions.frustration * 100).toFixed(0)}%
-                                  </p>
-                                </div>
-                              </CardContent>
-                            </Card>
-                          </>
-                        )}
-                      </div>
+                      <EmotionCards emotionTrends={emotionTrends} />
                     </TabsContent>
                     
                     <TabsContent value="emotions">
-                      <div className="h-[400px]">
-                        <ResponsiveContainer width="100%" height="100%">
-                          <AreaChart
-                            data={emotionTrends}
-                            margin={{ top: 10, right: 30, left: 0, bottom: 0 }}
-                          >
-                            <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
-                            <XAxis 
-                              dataKey="date" 
-                              tickFormatter={formatDate}
-                              tick={{ fontSize: 12 }}
-                            />
-                            <YAxis 
-                              domain={[0, 1]} 
-                              tick={{ fontSize: 12 }}
-                              tickFormatter={(value) => (value * 100).toFixed(0) + '%'}
-                            />
-                            <Tooltip 
-                              formatter={(value: number) => [(value * 100).toFixed(0) + '%', '']}
-                              labelFormatter={formatDate}
-                            />
-                            <Legend />
-                            <Area 
-                              type="monotone" 
-                              dataKey="emotions.joy" 
-                              stroke="#34D399" 
-                              fill="#34D39980" 
-                              name="Joy"
-                            />
-                            <Area 
-                              type="monotone" 
-                              dataKey="emotions.frustration" 
-                              stroke="#F97316" 
-                              fill="#F9731680" 
-                              name="Frustration"
-                            />
-                          </AreaChart>
-                        </ResponsiveContainer>
-                      </div>
+                      <EmotionTrends 
+                        emotionTrends={emotionTrends}
+                        formatDate={formatDate}
+                        dataKeys={["emotions.joy", "emotions.frustration"]} 
+                        names={["Joy", "Frustration"]}
+                        colors={["#34D399", "#F97316"]}
+                      />
                     </TabsContent>
                     
                     <TabsContent value="engagement">
-                      <div className="h-[400px]">
-                        <ResponsiveContainer width="100%" height="100%">
-                          <AreaChart
-                            data={emotionTrends}
-                            margin={{ top: 10, right: 30, left: 0, bottom: 0 }}
-                          >
-                            <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
-                            <XAxis 
-                              dataKey="date" 
-                              tickFormatter={formatDate}
-                              tick={{ fontSize: 12 }}
-                            />
-                            <YAxis 
-                              domain={[0, 1]} 
-                              tick={{ fontSize: 12 }}
-                              tickFormatter={(value) => (value * 100).toFixed(0) + '%'}
-                            />
-                            <Tooltip 
-                              formatter={(value: number) => [(value * 100).toFixed(0) + '%', '']}
-                              labelFormatter={formatDate}
-                            />
-                            <Legend />
-                            <Area 
-                              type="monotone" 
-                              dataKey="emotions.engagement" 
-                              stroke="#0EA5E9" 
-                              fill="#0EA5E980" 
-                              name="Engagement"
-                            />
-                            <Area 
-                              type="monotone" 
-                              dataKey="emotions.focus" 
-                              stroke="#8B5CF6" 
-                              fill="#8B5CF680" 
-                              name="Focus"
-                            />
-                          </AreaChart>
-                        </ResponsiveContainer>
-                      </div>
+                      <EmotionTrends 
+                        emotionTrends={emotionTrends}
+                        formatDate={formatDate}
+                        dataKeys={["emotions.engagement", "emotions.focus"]} 
+                        names={["Engagement", "Focus"]}
+                        colors={["#0EA5E9", "#8B5CF6"]}
+                      />
                     </TabsContent>
                     
                     <TabsContent value="detailed">
@@ -493,7 +455,7 @@ const ParentDashboard: React.FC = () => {
                                     },
                                     {
                                       subject: 'Overall',
-                                      A: (emotionTrends[emotionTrends.length - 1].emotions.overall + 1) * 50, // Convert -1 to 1 scale to 0-100
+                                      A: (emotionTrends[emotionTrends.length - 1].emotions.overall + 1) * 50,
                                       fullMark: 100,
                                     },
                                   ]}>
@@ -544,7 +506,7 @@ const ParentDashboard: React.FC = () => {
                                   <Bar 
                                     dataKey="emotions.overall" 
                                     name="Sentiment" 
-                                    fill={(entry) => entry.emotions.overall > 0.3 ? '#34D399' : entry.emotions.overall > -0.3 ? '#FCD34D' : '#F87171'}
+                                    fill={(entry) => getSentimentColor(entry.emotions.overall)}
                                   />
                                 </BarChart>
                               </ResponsiveContainer>
@@ -575,77 +537,7 @@ const ParentDashboard: React.FC = () => {
         </Card>
       </div>
       
-      {selectedChildId && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Activity Log</CardTitle>
-            <CardDescription>Recent games and emotional states</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {emotionTrends.length > 0 ? (
-              <div className="space-y-3">
-                {emotionTrends.slice().reverse().map((entry, index) => (
-                  <div key={index} className="bg-muted/50 p-4 rounded-lg">
-                    <div className="flex justify-between items-center mb-2">
-                      <h4 className="font-medium">{formatDate(entry.date)}</h4>
-                      <div 
-                        className={`px-3 py-1 rounded-full text-sm flex items-center ${
-                          entry.emotions.overall > 0.3 
-                            ? 'bg-green-100 text-green-800' 
-                            : entry.emotions.overall > -0.3
-                              ? 'bg-yellow-100 text-yellow-800'
-                              : 'bg-red-100 text-red-800'
-                        }`}
-                      >
-                        <Brain className="w-4 h-4 mr-1" />
-                        {entry.emotions.overall > 0.3 
-                          ? 'Positive' 
-                          : entry.emotions.overall > -0.3
-                            ? 'Neutral'
-                            : 'Needs Attention'}
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
-                      <div className="flex items-center">
-                        <Smile className="w-4 h-4 mr-1 text-green-500" />
-                        <span className="text-muted-foreground">Joy: </span>
-                        <span className={`ml-1 ${getScoreColor(entry.emotions.joy)}`}>
-                          {(entry.emotions.joy * 100).toFixed(0)}%
-                        </span>
-                      </div>
-                      <div className="flex items-center">
-                        <Zap className="w-4 h-4 mr-1 text-blue-500" />
-                        <span className="text-muted-foreground">Focus: </span>
-                        <span className={`ml-1 ${getScoreColor(entry.emotions.focus)}`}>
-                          {(entry.emotions.focus * 100).toFixed(0)}%
-                        </span>
-                      </div>
-                      <div className="flex items-center">
-                        <Activity className="w-4 h-4 mr-1 text-purple-500" />
-                        <span className="text-muted-foreground">Engagement: </span>
-                        <span className={`ml-1 ${getScoreColor(entry.emotions.engagement)}`}>
-                          {(entry.emotions.engagement * 100).toFixed(0)}%
-                        </span>
-                      </div>
-                      <div className="flex items-center">
-                        <AlertCircle className="w-4 h-4 mr-1 text-orange-500" />
-                        <span className="text-muted-foreground">Frustration: </span>
-                        <span className={`ml-1 ${getScoreColor(1 - entry.emotions.frustration)}`}>
-                          {(entry.emotions.frustration * 100).toFixed(0)}%
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="text-center py-4 text-muted-foreground">
-                No activity logs available yet
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      )}
+      {selectedChildId && <ActivityLog selectedChildId={selectedChildId} emotionTrends={emotionTrends} formatDate={formatDate} getScoreColor={getScoreColor} />}
     </div>
   );
 };

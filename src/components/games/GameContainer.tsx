@@ -3,9 +3,10 @@ import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { GameType, GameLevel, GameResult, EmotionScore } from '@/lib/types';
-import { db, generateEmotionScore } from '@/lib/mockDatabase';
+import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/lib/toast';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '@/contexts/AuthContext';
 import MageRun from './MageRun';
 import SnakeGame from './SnakeGame';
 import MirrorMoves from './MirrorMoves';
@@ -34,31 +35,80 @@ const GameContainer: React.FC<GameContainerProps> = ({
   const [reactionTimes, setReactionTimes] = useState<number[]>([]);
   const [gameResult, setGameResult] = useState<GameResult | null>(null);
   const [showGameInstructions, setShowGameInstructions] = useState(true);
+  const [gameId, setGameId] = useState<string | null>(null);
   
   const navigate = useNavigate();
+  const { childUser } = useAuth();
   
   useEffect(() => {
-    const loadLevel = async () => {
+    const loadGameInfo = async () => {
       try {
-        const levels = await db.getGameLevels(gameType);
-        const foundLevel = levels.find(l => l.id === levelId);
+        // Load game ID from database
+        const { data: gameData, error: gameError } = await supabase
+          .from('games')
+          .select('id, slug')
+          .eq('slug', gameType)
+          .single();
+          
+        if (gameError) throw gameError;
         
-        if (foundLevel) {
-          setLevel(foundLevel);
+        setGameId(gameData.id);
+        
+        // Load game levels from game_levels table
+        const { data: levelData, error: levelError } = await supabase
+          .from('game_levels')
+          .select('*')
+          .eq('game_id', gameData.id)
+          .eq('level_number', levelId)
+          .single();
+        
+        if (levelError) {
+          // If level not found in database, use backup level data
+          const backupLevel: GameLevel = {
+            id: levelId,
+            name: `Level ${levelId}`,
+            difficulty: levelId <= 2 ? 'easy' : levelId <= 4 ? 'medium' : 'hard',
+            speed: levelId * 2,
+            obstacles: levelId * 3,
+            timeLimit: Math.max(60 - (levelId * 5), 30)
+          };
+          
+          setLevel(backupLevel);
         } else {
-          toast.error('Game level not found');
-          navigate('/child-dashboard');
+          // Map database level to GameLevel type
+          const gameLevel: GameLevel = {
+            id: levelData.level_number,
+            name: levelData.name || `Level ${levelData.level_number}`,
+            difficulty: levelData.difficulty as 'easy' | 'medium' | 'hard',
+            speed: levelData.speed || levelId * 2,
+            obstacles: levelData.obstacles || levelId * 3,
+            timeLimit: levelData.time_limit || Math.max(60 - (levelId * 5), 30)
+          };
+          
+          setLevel(gameLevel);
         }
       } catch (error) {
         console.error('Error loading game level:', error);
         toast.error('Failed to load game');
+        
+        // Fallback level data
+        const fallbackLevel: GameLevel = {
+          id: levelId,
+          name: `Level ${levelId}`,
+          difficulty: levelId <= 2 ? 'easy' : levelId <= 4 ? 'medium' : 'hard',
+          speed: levelId * 2,
+          obstacles: levelId * 3,
+          timeLimit: Math.max(60 - (levelId * 5), 30)
+        };
+        
+        setLevel(fallbackLevel);
       } finally {
         setIsLoading(false);
       }
     };
     
-    loadLevel();
-  }, [gameType, levelId, navigate]);
+    loadGameInfo();
+  }, [gameType, levelId]);
   
   const startGame = () => {
     setShowGameInstructions(false);
@@ -93,17 +143,72 @@ const GameContainer: React.FC<GameContainerProps> = ({
       
       // Save game result
       try {
-        const result = await db.saveGameResult({
-          childId,
-          gameType,
-          levelId,
-          score,
-          completionTime,
-          retryCount,
-          successRate,
-          reactionTimes,
-          emotionScore
-        });
+        // First, create or update game session
+        const { data: sessionData, error: sessionError } = await supabase
+          .from('game_sessions')
+          .insert({
+            child_id: childId,
+            game_id: gameId,
+            difficulty: level.difficulty,
+            score: score,
+            time_spent: Math.round(completionTime),
+            moves: reactionTimes.length,
+            completed: true,
+            win: true,
+            attempts: retryCount + 1
+          })
+          .select()
+          .single();
+          
+        if (sessionError) throw sessionError;
+        
+        // Then, create sentiment analysis entry
+        const { data: sentimentData, error: sentimentError } = await supabase
+          .from('sentiment_analysis')
+          .insert({
+            child_id: childId,
+            game_session_id: sessionData.id,
+            enjoyment_level: Math.round(emotionScore.joy * 100),
+            frustration_level: Math.round(emotionScore.frustration * 100),
+            focus_level: Math.round(emotionScore.focus * 100),
+            persistence_level: Math.round(emotionScore.engagement * 100),
+            overall_sentiment: emotionScore.overall > 0.3 ? 'positive' : 
+                              emotionScore.overall > -0.3 ? 'neutral' : 'negative'
+          });
+        
+        if (sentimentError) throw sentimentError;
+        
+        // Update leaderboard if score is high
+        const { error: leaderboardError } = await supabase
+          .from('leaderboard')
+          .insert({
+            child_id: childId,
+            child_name: childUser?.name || 'Unknown',
+            avatar_emoji: childUser?.avatarId.toString() || '1',
+            game_id: gameId,
+            game_name: gameType.replace('-', ' ').replace(/\b\w/g, l => l.toUpperCase()),
+            game_slug: gameType,
+            difficulty: level.difficulty,
+            score: score,
+            created_at: new Date().toISOString()
+          });
+        
+        if (leaderboardError) console.error('Error updating leaderboard:', leaderboardError);
+        
+        // Create result object for UI
+        const result: GameResult = {
+          id: sessionData.id,
+          childId: childId,
+          gameType: gameType as GameType,
+          levelId: level.id,
+          score: score,
+          completionTime: completionTime,
+          retryCount: retryCount,
+          successRate: successRate,
+          reactionTimes: reactionTimes,
+          emotionScore: emotionScore,
+          createdAt: new Date().toISOString()
+        };
         
         setGameResult(result);
         
@@ -118,6 +223,61 @@ const GameContainer: React.FC<GameContainerProps> = ({
       setGameStarted(false);
       toast.error('Game over! Try again?');
     }
+  };
+  
+  // Generate emotion score based on game performance
+  const generateEmotionScore = (
+    completionTime: number,
+    timeLimit: number,
+    retryCount: number,
+    successRate: number,
+    reactionTimes: number[]
+  ): EmotionScore => {
+    // Calculate average reaction time (in seconds)
+    const avgReactionTime = reactionTimes.length > 0 
+      ? reactionTimes.reduce((sum, time) => sum + time, 0) / reactionTimes.length / 1000
+      : 1;
+    
+    // Time efficiency (higher is better)
+    const timeEfficiency = Math.min(1, (timeLimit / Math.max(completionTime, 1)));
+    
+    // Joy - based on success rate and time efficiency
+    const joy = Math.min(1, (successRate * 0.7) + (timeEfficiency * 0.3));
+    
+    // Frustration - based on retry count and reaction times
+    const baseRetryFrustration = Math.min(1, retryCount / 5);
+    const reactionFrustration = Math.min(1, avgReactionTime / 2);
+    const frustration = (baseRetryFrustration * 0.7) + (reactionFrustration * 0.3);
+    
+    // Engagement - based on reaction time consistency and success
+    const rtConsistency = reactionTimes.length > 1 
+      ? 1 - Math.min(1, standardDeviation(reactionTimes) / 1000)
+      : 0.5;
+    const engagement = (rtConsistency * 0.6) + (successRate * 0.4);
+    
+    // Focus - based on time efficiency and reaction time
+    const focus = (timeEfficiency * 0.5) + (Math.max(0, 1 - avgReactionTime / 2) * 0.5);
+    
+    // Overall score combines all factors (-1 to 1 scale)
+    const overall = ((joy + engagement + focus) / 3) - frustration;
+    
+    return {
+      joy,
+      frustration,
+      engagement,
+      focus,
+      overall: Math.max(-1, Math.min(1, overall))
+    };
+  };
+  
+  // Helper function to calculate standard deviation
+  const standardDeviation = (values: number[]): number => {
+    if (values.length <= 1) return 0;
+    
+    const avg = values.reduce((sum, val) => sum + val, 0) / values.length;
+    const squareDiffs = values.map(value => Math.pow(value - avg, 2));
+    const avgSquareDiff = squareDiffs.reduce((sum, val) => sum + val, 0) / squareDiffs.length;
+    return Math.sqrt(avgSquareDiff);
   };
   
   const handleRetry = () => {
@@ -273,9 +433,9 @@ const GameContainer: React.FC<GameContainerProps> = ({
             </Button>
             
             <CardTitle className="flex items-center">
-              <span>{getGameTitle()} - {level.name}</span> 
-              <span className={`text-sm font-normal px-3 py-1 rounded-full ml-2 ${getDifficultyColor(level.difficulty)}`}>
-                {level.difficulty}
+              <span>{getGameTitle()} - {level?.name}</span> 
+              <span className={`text-sm font-normal px-3 py-1 rounded-full ml-2 ${getDifficultyColor(level?.difficulty || 'easy')}`}>
+                {level?.difficulty}
               </span>
             </CardTitle>
             
@@ -287,7 +447,7 @@ const GameContainer: React.FC<GameContainerProps> = ({
           </div>
           <CardDescription className="flex items-center justify-center text-center mt-2">
             <Clock className="w-4 h-4 mr-1" />
-            Time Limit: {level.timeLimit} seconds
+            Time Limit: {level?.timeLimit} seconds
           </CardDescription>
         </CardHeader>
       </Card>

@@ -1,6 +1,8 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { GameLevel } from '@/lib/types';
+import { supabase } from '@/integrations/supabase/client';
+import { toast } from '@/lib/toast';
 
 interface MirrorMovesProps {
   level: GameLevel;
@@ -23,8 +25,17 @@ const MirrorMoves: React.FC<MirrorMovesProps> = ({ level, onGameOver, onReaction
   const [gameActive, setGameActive] = useState(true);
   const [round, setRound] = useState(1);
   const [lastKeyPressTime, setLastKeyPressTime] = useState<number | null>(null);
+  const [timerInterval, setTimerInterval] = useState<ReturnType<typeof setInterval> | null>(null);
   
+  // Use level speed for game difficulty adjustment
   const gameSpeed = level.speed;
+  
+  // Clean up timer on unmount
+  useEffect(() => {
+    return () => {
+      if (timerInterval) clearInterval(timerInterval);
+    };
+  }, [timerInterval]);
   
   // Initialize the game
   useEffect(() => {
@@ -49,15 +60,26 @@ const MirrorMoves: React.FC<MirrorMovesProps> = ({ level, onGameOver, onReaction
       });
     }, 1000);
     
+    setTimerInterval(timer);
+    
     return () => {
       clearInterval(timer);
     };
   }, []);
   
-  // Generate a pattern
+  // Generate a pattern based on difficulty
   const generatePattern = useCallback(() => {
     const directions: ('up' | 'down' | 'left' | 'right')[] = ['up', 'down', 'left', 'right'];
-    const patternLength = Math.min(3 + Math.floor(round / 2), 8); // Increase pattern length as rounds progress
+    
+    // Adjust pattern length based on difficulty and round
+    let patternLength;
+    if (level.difficulty === 'easy') {
+      patternLength = Math.min(2 + Math.floor(round / 3), 5); // Easier: Shorter patterns
+    } else if (level.difficulty === 'medium') {
+      patternLength = Math.min(3 + Math.floor(round / 2), 7); // Medium: Regular progression
+    } else {
+      patternLength = Math.min(3 + Math.floor(round / 2), 9); // Hard: Longer patterns
+    }
     
     const newPattern: PatternStep[] = [];
     
@@ -75,11 +97,16 @@ const MirrorMoves: React.FC<MirrorMovesProps> = ({ level, onGameOver, onReaction
     
     // Show the pattern
     showPattern(newPattern);
-  }, [round]);
+  }, [round, level.difficulty]);
   
-  // Show the pattern to the player
+  // Show the pattern to the player with adjusted speed
   const showPattern = useCallback((patternToShow: PatternStep[]) => {
     let step = 0;
+    
+    // Adjust speed of pattern display based on difficulty
+    const displaySpeed = level.difficulty === 'easy' ? gameSpeed * 0.7 : 
+                         level.difficulty === 'medium' ? gameSpeed : 
+                         gameSpeed * 1.3;
     
     const intervalId = setInterval(() => {
       if (step < patternToShow.length) {
@@ -91,11 +118,12 @@ const MirrorMoves: React.FC<MirrorMovesProps> = ({ level, onGameOver, onReaction
         clearInterval(intervalId);
         setShowingPattern(false);
         setCurrentStep(-1); // No step highlighted
+        setLastKeyPressTime(Date.now()); // Start timing from when pattern is fully shown
       }
-    }, 1000 / gameSpeed);
+    }, 1000 / displaySpeed);
     
     return () => clearInterval(intervalId);
-  }, [gameSpeed]);
+  }, [gameSpeed, level.difficulty]);
   
   // Handle keyboard input
   useEffect(() => {
@@ -142,14 +170,18 @@ const MirrorMoves: React.FC<MirrorMovesProps> = ({ level, onGameOver, onReaction
           
           // Check if pattern is complete
           if (nextStep >= pattern.length) {
-            // Pattern complete
-            const roundScore = 10 * pattern.length;
+            // Pattern complete - calculate score based on difficulty
+            const difficultyMultiplier = level.difficulty === 'easy' ? 8 : 
+                                        level.difficulty === 'medium' ? 10 : 12;
+            const roundScore = difficultyMultiplier * pattern.length;
             const newScore = score + roundScore;
             setScore(newScore);
             
             // Check win condition
-            if (newScore >= 100) {
+            if (newScore >= 100 || round >= 10) {
               setGameActive(false);
+              // Save game session data asynchronously
+              saveGameSession(newScore, true);
               onGameOver(newScore, true);
               return;
             }
@@ -161,9 +193,16 @@ const MirrorMoves: React.FC<MirrorMovesProps> = ({ level, onGameOver, onReaction
             }, 1000);
           }
         } else {
-          // Incorrect move
-          setGameActive(false);
-          onGameOver(score, false);
+          // Incorrect move - more forgiving on easy difficulty
+          if (level.difficulty === 'easy' && round <= 2) {
+            // For beginners on easy difficulty, give a second chance
+            toast.info("Try again! Watch the pattern carefully.");
+          } else {
+            setGameActive(false);
+            // Save game session data asynchronously
+            saveGameSession(score, false);
+            onGameOver(score, false);
+          }
         }
       }
     };
@@ -173,7 +212,57 @@ const MirrorMoves: React.FC<MirrorMovesProps> = ({ level, onGameOver, onReaction
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [currentStep, gameActive, generatePattern, onGameOver, onReactionTime, pattern, score, showingPattern, lastKeyPressTime]);
+  }, [currentStep, gameActive, generatePattern, onGameOver, onReactionTime, pattern, score, showingPattern, lastKeyPressTime, level.difficulty, round]);
+  
+  // Save game session to database
+  const saveGameSession = async (finalScore: number, win: boolean) => {
+    try {
+      // Get the game_id for mirror-moves
+      const { data: gameData, error: gameError } = await supabase
+        .from('games')
+        .select('id')
+        .eq('slug', 'mirror-moves')
+        .single();
+      
+      if (gameError) throw gameError;
+      
+      // Get the child profile from auth context
+      const auth = await supabase.auth.getSession();
+      if (!auth.data.session?.user.id) {
+        throw new Error('User not authenticated');
+      }
+      
+      // Get child id from profiles
+      const { data: profileData, error: profileError } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('id', auth.data.session.user.id)
+        .single();
+      
+      if (profileError) throw profileError;
+      
+      // Save game session
+      const { data, error } = await supabase
+        .from('game_sessions')
+        .insert({
+          child_id: profileData.id,
+          game_id: gameData.id,
+          score: finalScore,
+          difficulty: level.difficulty,
+          win: win,
+          completed: true,
+          attempts: round,
+          moves: pattern.length * round,
+          time_spent: level.timeLimit - timeLeft
+        });
+      
+      if (error) throw error;
+      
+      console.log('Game session saved successfully');
+    } catch (error) {
+      console.error('Error saving game session:', error);
+    }
+  };
   
   // Render game
   useEffect(() => {
@@ -194,6 +283,37 @@ const MirrorMoves: React.FC<MirrorMovesProps> = ({ level, onGameOver, onReaction
     const centerX = canvas.width / 2;
     const centerY = canvas.height / 2;
     const gridSize = 80;
+    
+    // Draw background elements based on difficulty
+    if (level.difficulty === 'easy') {
+      // Simple background for easy difficulty
+      ctx.fillStyle = '#1A1F2C';
+    } else if (level.difficulty === 'medium') {
+      // Add some subtle patterns for medium difficulty
+      for (let i = 0; i < 5; i++) {
+        ctx.fillStyle = `rgba(75, 85, 99, ${0.1 + (i * 0.02)})`;
+        ctx.fillRect(
+          centerX - 200 + (i * 20), 
+          centerY - 200 + (i * 20), 
+          400 - (i * 40), 
+          400 - (i * 40)
+        );
+      }
+    } else {
+      // More distracting patterns for hard difficulty
+      for (let i = 0; i < 10; i++) {
+        ctx.fillStyle = `rgba(75, 85, 99, ${0.05 + (i % 2) * 0.05})`;
+        ctx.beginPath();
+        ctx.arc(
+          centerX + Math.cos(i * Math.PI / 5) * 150,
+          centerY + Math.sin(i * Math.PI / 5) * 150,
+          10 + (i * 5), 
+          0, 
+          Math.PI * 2
+        );
+        ctx.fill();
+      }
+    }
     
     // Draw center point
     ctx.fillStyle = '#8B5CF6';
@@ -312,7 +432,7 @@ const MirrorMoves: React.FC<MirrorMovesProps> = ({ level, onGameOver, onReaction
     ctx.fillStyle = '#34D399';
     ctx.fillRect(0, canvas.height - 10, progressWidth, 10);
     
-  }, [pattern, currentStep, showingPattern, score, timeLeft, round]);
+  }, [pattern, currentStep, showingPattern, score, timeLeft, round, level.difficulty]);
   
   return (
     <canvas

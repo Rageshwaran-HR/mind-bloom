@@ -11,10 +11,11 @@ export interface User {
 export interface ChildUser extends User {
   parentId: string;
   avatarId: number;
-  avatarUrl?: string; // Added avatarUrl for image-based avatars
+  avatarUrl?: string; // For image-based avatars
   streakDays: number;
   lastPlayDate?: string;
-  username?: string; // Added username for child login
+  username?: string; // For child login
+  password?: string; // For child login (will be hashed in the actual database)
 }
 
 export interface ParentUser extends User {
@@ -68,9 +69,11 @@ export interface LeaderboardEntry {
   childId: string;
   childName: string;
   avatarId: number;
-  avatarUrl?: string; // Added avatarUrl for image-based avatars
+  avatarUrl?: string;
   score: number;
   rank: number;
+  gameType?: GameType;
+  difficulty?: string;
 }
 
 // Achievement system
@@ -97,4 +100,33 @@ export interface ApiResponse<T> {
   success: boolean;
   data?: T;
   error?: string;
+}
+
+// Game session data for Supabase
+export interface GameSession {
+  id?: string;
+  child_id: string;
+  game_id: string;
+  difficulty: string;
+  score: number;
+  time_spent?: number;
+  moves?: number;
+  completed: boolean;
+  win: boolean;
+  attempts: number;
+  created_at?: string;
+}
+
+// Sentiment analysis data for Supabase
+export interface SentimentAnalysis {
+  id?: string;
+  child_id: string;
+  game_session_id: string;
+  frustration_level: number;
+  persistence_level: number;
+  focus_level: number;
+  enjoyment_level: number;
+  overall_sentiment: string;
+  notes?: string;
+  created_at?: string;
 }

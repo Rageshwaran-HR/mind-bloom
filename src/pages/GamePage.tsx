@@ -1,13 +1,13 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { GameType } from '@/lib/types';
+import { supabase } from '@/integrations/supabase/client';
 import GameContainer from '@/components/games/GameContainer';
 import { toast } from '@/lib/toast';
-import { db } from '@/lib/mockDatabase';
 
 const GamePage: React.FC = () => {
   const { gameType, levelId, mode } = useParams<{ gameType: string; levelId: string; mode: string }>();
@@ -18,17 +18,66 @@ const GamePage: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   
   // Load game levels on mount
-  React.useEffect(() => {
+  useEffect(() => {
     if (!gameType) return;
     
     const fetchLevels = async () => {
       try {
-        const gameLevels = await db.getGameLevels(gameType as GameType);
-        setLevels(gameLevels);
+        // First get the game ID
+        const { data: gameData, error: gameError } = await supabase
+          .from('games')
+          .select('id')
+          .eq('slug', gameType)
+          .single();
+          
+        if (gameError) throw gameError;
+        
+        // Then get all levels for this game
+        const { data: levelsData, error: levelsError } = await supabase
+          .from('game_levels')
+          .select('*')
+          .eq('game_id', gameData.id)
+          .order('level_number', { ascending: true });
+          
+        if (levelsError) throw levelsError;
+        
+        // If no levels found in database, create default levels
+        if (!levelsData || levelsData.length === 0) {
+          // Create default levels
+          const defaultLevels = [
+            { id: 1, name: 'Level 1', difficulty: 'easy', speed: 2, obstacles: 3, timeLimit: 60 },
+            { id: 2, name: 'Level 2', difficulty: 'easy', speed: 3, obstacles: 5, timeLimit: 55 },
+            { id: 3, name: 'Level 3', difficulty: 'medium', speed: 4, obstacles: 7, timeLimit: 50 }
+          ];
+          
+          setLevels(defaultLevels);
+        } else {
+          // Map database levels to UI format
+          const formattedLevels = levelsData.map(level => ({
+            id: level.level_number,
+            name: level.name || `Level ${level.level_number}`,
+            difficulty: level.difficulty,
+            speed: level.speed,
+            obstacles: level.obstacles,
+            timeLimit: level.time_limit
+          }));
+          
+          setLevels(formattedLevels);
+        }
+        
         setIsLoading(false);
       } catch (error) {
         console.error('Error loading game levels:', error);
         toast.error('Failed to load game levels');
+        
+        // Fallback to default levels
+        const defaultLevels = [
+          { id: 1, name: 'Level 1', difficulty: 'easy', speed: 2, obstacles: 3, timeLimit: 60 },
+          { id: 2, name: 'Level 2', difficulty: 'easy', speed: 3, obstacles: 5, timeLimit: 55 },
+          { id: 3, name: 'Level 3', difficulty: 'medium', speed: 4, obstacles: 7, timeLimit: 50 }
+        ];
+        
+        setLevels(defaultLevels);
         setIsLoading(false);
       }
     };
@@ -37,7 +86,7 @@ const GamePage: React.FC = () => {
   }, [gameType]);
   
   // Redirect if no child selected
-  React.useEffect(() => {
+  useEffect(() => {
     if (!childUser) {
       toast.error('Please select a child profile first');
       navigate('/login');
