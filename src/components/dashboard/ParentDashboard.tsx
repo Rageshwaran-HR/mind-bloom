@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -21,6 +20,48 @@ interface EmotionTrend {
   emotions: EmotionScore;
 }
 
+const getSentimentColor = (value: number): string => {
+  if (value > 0.3) return "#34D399"; // Green for positive
+  if (value > -0.3) return "#FCD34D"; // Yellow for neutral
+  return "#F87171"; // Red for negative
+};
+
+const CustomBarChart = ({ data }: { data: EmotionTrend[] }) => {
+  return (
+    <ResponsiveContainer width="100%" height="100%">
+      <BarChart
+        data={data}
+        margin={{ top: 10, right: 30, left: 0, bottom: 0 }}
+      >
+        <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
+        <XAxis 
+          dataKey="date" 
+          tickFormatter={(date) => new Date(date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+          tick={{ fontSize: 12 }}
+        />
+        <YAxis 
+          domain={[-1, 1]} 
+          tick={{ fontSize: 12 }}
+          tickFormatter={(value) => value.toFixed(1)}
+        />
+        <Tooltip 
+          formatter={(value: number) => [value.toFixed(2), 'Sentiment']}
+          labelFormatter={(date) => new Date(date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+        />
+        <Bar 
+          dataKey="emotions.overall" 
+          name="Sentiment"
+          fill="#8884d8" 
+        >
+          {data.map((entry, index) => (
+            <Cell key={`cell-${index}`} fill={getSentimentColor(entry.emotions.overall)} />
+          ))}
+        </Bar>
+      </BarChart>
+    </ResponsiveContainer>
+  );
+};
+
 const ParentDashboard: React.FC = () => {
   const [selectedChildId, setSelectedChildId] = useState<string | null>(null);
   const [emotionTrends, setEmotionTrends] = useState<EmotionTrend[]>([]);
@@ -33,7 +74,6 @@ const ParentDashboard: React.FC = () => {
   useEffect(() => {
     if (!parentUser) return;
     
-    // Set first child as selected if none selected
     if (!selectedChildId && parentUser.children.length > 0) {
       setSelectedChildId(parentUser.children[0].id);
     }
@@ -46,7 +86,6 @@ const ParentDashboard: React.FC = () => {
     
     const fetchData = async () => {
       try {
-        // Fetch emotion trends from database
         const { data: sentimentData, error: sentimentError } = await supabase
           .from('sentiment_analysis')
           .select('*, game_sessions(*)')
@@ -56,7 +95,6 @@ const ParentDashboard: React.FC = () => {
         if (sentimentError) throw sentimentError;
         
         if (sentimentData) {
-          // Transform sentiment data into emotion trends format
           const trends = sentimentData.map(item => ({
             date: item.created_at,
             emotions: {
@@ -70,7 +108,6 @@ const ParentDashboard: React.FC = () => {
           
           setEmotionTrends(trends);
           
-          // Generate insight from the most recent data
           if (trends.length > 0) {
             const recentData = trends[trends.length - 1];
             const insight = generateSentimentInsight(recentData.emotions, trends);
@@ -86,7 +123,6 @@ const ParentDashboard: React.FC = () => {
     fetchData();
   }, [selectedChildId]);
   
-  // Map text sentiment to a number value (-1 to 1)
   const mapOverallSentiment = (sentiment: string | null): number => {
     if (!sentiment) return 0;
     
@@ -98,7 +134,6 @@ const ParentDashboard: React.FC = () => {
     }
   };
   
-  // Generate insight text based on emotional data
   const generateSentimentInsight = (currentEmotions: EmotionScore, trends: EmotionTrend[]): string => {
     if (trends.length < 2) {
       return "Not enough data to generate insights yet. Have your child play more games to see patterns in their emotional state.";
@@ -107,7 +142,6 @@ const ParentDashboard: React.FC = () => {
     const trendLength = trends.length;
     const recentTrends = trends.slice(Math.max(0, trendLength - 5), trendLength);
     
-    // Calculate averages for recent trends
     const averages = {
       joy: recentTrends.reduce((sum, t) => sum + t.emotions.joy, 0) / recentTrends.length,
       frustration: recentTrends.reduce((sum, t) => sum + t.emotions.frustration, 0) / recentTrends.length,
@@ -126,7 +160,6 @@ const ParentDashboard: React.FC = () => {
       insight = "Your child is showing balanced emotional patterns during gameplay. ";
     }
     
-    // Add specific insights based on emotional indicators
     if (averages.joy > 0.7) {
       insight += "They're demonstrating high levels of enjoyment, which suggests the games are providing positive experiences. ";
     }
@@ -192,11 +225,117 @@ const ParentDashboard: React.FC = () => {
     return parentUser.children.find(child => child.id === selectedChildId);
   };
   
-  // This function returns a string color code based on the overall sentiment value
-  const getSentimentColor = (value: number): string => {
-    if (value > 0.3) return "#34D399"; // Green for positive
-    if (value > -0.3) return "#FCD34D"; // Yellow for neutral
-    return "#F87171"; // Red for negative
+  const renderDetailedTab = () => {
+    return (
+      <TabsContent value="detailed">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg">Emotion Balance</CardTitle>
+              <CardDescription>Latest emotional distribution</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="h-[300px]">
+                {emotionTrends.length > 0 && (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={[
+                          { name: 'Joy', value: emotionTrends[emotionTrends.length - 1].emotions.joy },
+                          { name: 'Focus', value: emotionTrends[emotionTrends.length - 1].emotions.focus },
+                          { name: 'Engagement', value: emotionTrends[emotionTrends.length - 1].emotions.engagement },
+                          { name: 'Frustration', value: emotionTrends[emotionTrends.length - 1].emotions.frustration },
+                        ]}
+                        cx="50%"
+                        cy="50%"
+                        labelLine={false}
+                        outerRadius={80}
+                        fill="#8884d8"
+                        dataKey="value"
+                        label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                      >
+                        <Cell fill="#34D399" />
+                        <Cell fill="#8B5CF6" />
+                        <Cell fill="#0EA5E9" />
+                        <Cell fill="#F97316" />
+                      </Pie>
+                      <Tooltip formatter={(value: number) => [(value * 100).toFixed(0) + '%', '']} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+          
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg">Mental Health Indicators</CardTitle>
+              <CardDescription>Comprehensive assessment</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="h-[300px]">
+                {emotionTrends.length > 0 && (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <RadarChart cx="50%" cy="50%" outerRadius="80%" data={[
+                      {
+                        subject: 'Joy',
+                        A: emotionTrends[emotionTrends.length - 1].emotions.joy * 100,
+                        fullMark: 100,
+                      },
+                      {
+                        subject: 'Focus',
+                        A: emotionTrends[emotionTrends.length - 1].emotions.focus * 100,
+                        fullMark: 100,
+                      },
+                      {
+                        subject: 'Engagement',
+                        A: emotionTrends[emotionTrends.length - 1].emotions.engagement * 100,
+                        fullMark: 100,
+                      },
+                      {
+                        subject: 'Resilience',
+                        A: (1 - emotionTrends[emotionTrends.length - 1].emotions.frustration) * 100,
+                        fullMark: 100,
+                      },
+                      {
+                        subject: 'Overall',
+                        A: (emotionTrends[emotionTrends.length - 1].emotions.overall + 1) * 50,
+                        fullMark: 100,
+                      },
+                    ]}>
+                      <PolarGrid />
+                      <PolarAngleAxis dataKey="subject" />
+                      <Radar name="Current" dataKey="A" stroke="#8B5CF6" fill="#8B5CF6" fillOpacity={0.6} />
+                      <Tooltip formatter={(value: number) => [`${value.toFixed(0)}%`, '']} />
+                    </RadarChart>
+                  </ResponsiveContainer>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+        
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">Sentiment Analysis</CardTitle>
+            <CardDescription>How your child's mental state changes over time</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              <p className="text-muted-foreground">
+                {sentimentInsight}
+              </p>
+              
+              <div className="h-[300px]">
+                {emotionTrends.length > 0 && (
+                  <CustomBarChart data={emotionTrends} />
+                )}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </TabsContent>
+    );
   };
   
   if (isLoading) {
@@ -383,138 +522,7 @@ const ParentDashboard: React.FC = () => {
                       />
                     </TabsContent>
                     
-                    <TabsContent value="detailed">
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-                        <Card>
-                          <CardHeader>
-                            <CardTitle className="text-lg">Emotion Balance</CardTitle>
-                            <CardDescription>Latest emotional distribution</CardDescription>
-                          </CardHeader>
-                          <CardContent>
-                            <div className="h-[300px]">
-                              {emotionTrends.length > 0 && (
-                                <ResponsiveContainer width="100%" height="100%">
-                                  <PieChart>
-                                    <Pie
-                                      data={[
-                                        { name: 'Joy', value: emotionTrends[emotionTrends.length - 1].emotions.joy },
-                                        { name: 'Focus', value: emotionTrends[emotionTrends.length - 1].emotions.focus },
-                                        { name: 'Engagement', value: emotionTrends[emotionTrends.length - 1].emotions.engagement },
-                                        { name: 'Frustration', value: emotionTrends[emotionTrends.length - 1].emotions.frustration },
-                                      ]}
-                                      cx="50%"
-                                      cy="50%"
-                                      labelLine={false}
-                                      outerRadius={80}
-                                      fill="#8884d8"
-                                      dataKey="value"
-                                      label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
-                                    >
-                                      <Cell fill="#34D399" />
-                                      <Cell fill="#8B5CF6" />
-                                      <Cell fill="#0EA5E9" />
-                                      <Cell fill="#F97316" />
-                                    </Pie>
-                                    <Tooltip formatter={(value: number) => [(value * 100).toFixed(0) + '%', '']} />
-                                  </PieChart>
-                                </ResponsiveContainer>
-                              )}
-                            </div>
-                          </CardContent>
-                        </Card>
-                        
-                        <Card>
-                          <CardHeader>
-                            <CardTitle className="text-lg">Mental Health Indicators</CardTitle>
-                            <CardDescription>Comprehensive assessment</CardDescription>
-                          </CardHeader>
-                          <CardContent>
-                            <div className="h-[300px]">
-                              {emotionTrends.length > 0 && (
-                                <ResponsiveContainer width="100%" height="100%">
-                                  <RadarChart cx="50%" cy="50%" outerRadius="80%" data={[
-                                    {
-                                      subject: 'Joy',
-                                      A: emotionTrends[emotionTrends.length - 1].emotions.joy * 100,
-                                      fullMark: 100,
-                                    },
-                                    {
-                                      subject: 'Focus',
-                                      A: emotionTrends[emotionTrends.length - 1].emotions.focus * 100,
-                                      fullMark: 100,
-                                    },
-                                    {
-                                      subject: 'Engagement',
-                                      A: emotionTrends[emotionTrends.length - 1].emotions.engagement * 100,
-                                      fullMark: 100,
-                                    },
-                                    {
-                                      subject: 'Resilience',
-                                      A: (1 - emotionTrends[emotionTrends.length - 1].emotions.frustration) * 100,
-                                      fullMark: 100,
-                                    },
-                                    {
-                                      subject: 'Overall',
-                                      A: (emotionTrends[emotionTrends.length - 1].emotions.overall + 1) * 50,
-                                      fullMark: 100,
-                                    },
-                                  ]}>
-                                    <PolarGrid />
-                                    <PolarAngleAxis dataKey="subject" />
-                                    <Radar name="Current" dataKey="A" stroke="#8B5CF6" fill="#8B5CF6" fillOpacity={0.6} />
-                                    <Tooltip formatter={(value: number) => [`${value.toFixed(0)}%`, '']} />
-                                  </RadarChart>
-                                </ResponsiveContainer>
-                              )}
-                            </div>
-                          </CardContent>
-                        </Card>
-                      </div>
-                      
-                      <Card>
-                        <CardHeader>
-                          <CardTitle className="text-lg">Sentiment Analysis</CardTitle>
-                          <CardDescription>How your child's mental state changes over time</CardDescription>
-                        </CardHeader>
-                        <CardContent>
-                          <div className="space-y-4">
-                            <p className="text-muted-foreground">
-                              {sentimentInsight}
-                            </p>
-                            
-                            <div className="h-[300px]">
-                              <ResponsiveContainer width="100%" height="100%">
-                                <BarChart
-                                  data={emotionTrends}
-                                  margin={{ top: 10, right: 30, left: 0, bottom: 0 }}
-                                >
-                                  <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
-                                  <XAxis 
-                                    dataKey="date" 
-                                    tickFormatter={formatDate}
-                                    tick={{ fontSize: 12 }}
-                                  />
-                                  <YAxis 
-                                    domain={[-1, 1]} 
-                                    tick={{ fontSize: 12 }}
-                                    tickFormatter={(value) => value.toFixed(1)}
-                                  />
-                                  <Tooltip 
-                                    formatter={(value: number) => [value.toFixed(2), 'Sentiment']}
-                                    labelFormatter={formatDate}
-                                  />
-                                  <Bar 
-                                    dataKey="emotions.overall" 
-                                    name="Sentiment" 
-                                    fill={(entry) => getSentimentColor(entry.emotions.overall)}
-                                  />
-                                </BarChart>
-                              </ResponsiveContainer>
-                            </div>
-                          </div>
-                        </CardContent>
-                      </Card>
-                    </TabsContent>
+                    {renderDetailedTab()}
                   </Tabs>
                 ) : (
                   <div className="text-center py-12 text-muted-foreground">

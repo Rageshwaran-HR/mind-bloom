@@ -47,6 +47,57 @@ export type Database = {
           },
         ]
       }
+      game_levels: {
+        Row: {
+          created_at: string
+          difficulty: string
+          game_id: string
+          id: string
+          level_number: number
+          name: string
+          obstacles: number
+          speed: number
+          time_limit: number
+        }
+        Insert: {
+          created_at?: string
+          difficulty: string
+          game_id: string
+          id?: string
+          level_number: number
+          name: string
+          obstacles: number
+          speed: number
+          time_limit: number
+        }
+        Update: {
+          created_at?: string
+          difficulty?: string
+          game_id?: string
+          id?: string
+          level_number?: number
+          name?: string
+          obstacles?: number
+          speed?: number
+          time_limit?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "game_levels_game_id_fkey"
+            columns: ["game_id"]
+            isOneToOne: false
+            referencedRelation: "games"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "game_levels_game_id_fkey"
+            columns: ["game_id"]
+            isOneToOne: false
+            referencedRelation: "leaderboard"
+            referencedColumns: ["game_id"]
+          },
+        ]
+      }
       game_sessions: {
         Row: {
           attempts: number | null

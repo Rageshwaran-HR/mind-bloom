@@ -26,7 +26,7 @@ export interface ParentUser extends User {
 export type GameType = 'mage-run' | 'snake-game' | 'mirror-moves' | 'maze-runner';
 
 export interface GameLevel {
-  id: number;
+  id: number | string;
   name: string;
   difficulty: 'easy' | 'medium' | 'hard';
   speed: number;
@@ -129,4 +129,30 @@ export interface SentimentAnalysis {
   overall_sentiment: string;
   notes?: string;
   created_at?: string;
+}
+
+// Database game level type
+export interface DbGameLevel {
+  id: string;
+  game_id: string;
+  level_number: number;
+  name: string;
+  difficulty: string;
+  speed: number;
+  obstacles: number;
+  time_limit: number;
+  created_at: string;
+}
+
+// Leaderboard entry from database
+export interface DbLeaderboardEntry {
+  child_id: string;
+  child_name: string;
+  avatar_emoji: string;
+  game_id: string;
+  game_name: string;
+  game_slug: string;
+  difficulty: string;
+  score: number;
+  created_at: string;
 }

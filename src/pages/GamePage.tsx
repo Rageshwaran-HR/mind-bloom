@@ -1,10 +1,9 @@
-
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { GameType } from '@/lib/types';
+import { GameType, GameLevel, DbGameLevel } from '@/lib/types';
 import { supabase } from '@/integrations/supabase/client';
 import GameContainer from '@/components/games/GameContainer';
 import { toast } from '@/lib/toast';
@@ -14,7 +13,7 @@ const GamePage: React.FC = () => {
   const { childUser } = useAuth();
   const navigate = useNavigate();
   const [selectedLevel, setSelectedLevel] = useState<number>(parseInt(levelId || '1'));
-  const [levels, setLevels] = useState<any[]>([]);
+  const [levels, setLevels] = useState<GameLevel[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   
   // Load game levels on mount
@@ -32,17 +31,17 @@ const GamePage: React.FC = () => {
           
         if (gameError) throw gameError;
         
-        // Then get all levels for this game
-        const { data: levelsData, error: levelsError } = await supabase
+        // Then get all levels for this game from the new game_levels table
+        const { data: gameLevelsData, error: gameLevelsError } = await supabase
           .from('game_levels')
           .select('*')
           .eq('game_id', gameData.id)
           .order('level_number', { ascending: true });
           
-        if (levelsError) throw levelsError;
+        if (gameLevelsError) throw gameLevelsError;
         
         // If no levels found in database, create default levels
-        if (!levelsData || levelsData.length === 0) {
+        if (!gameLevelsData || gameLevelsData.length === 0) {
           // Create default levels
           const defaultLevels = [
             { id: 1, name: 'Level 1', difficulty: 'easy', speed: 2, obstacles: 3, timeLimit: 60 },
@@ -53,10 +52,10 @@ const GamePage: React.FC = () => {
           setLevels(defaultLevels);
         } else {
           // Map database levels to UI format
-          const formattedLevels = levelsData.map(level => ({
-            id: level.level_number,
+          const formattedLevels: GameLevel[] = gameLevelsData.map(level => ({
+            id: level.id,
             name: level.name || `Level ${level.level_number}`,
-            difficulty: level.difficulty,
+            difficulty: level.difficulty as 'easy' | 'medium' | 'hard',
             speed: level.speed,
             obstacles: level.obstacles,
             timeLimit: level.time_limit

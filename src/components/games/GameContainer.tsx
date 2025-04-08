@@ -1,8 +1,7 @@
-
 import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { GameType, GameLevel, GameResult, EmotionScore } from '@/lib/types';
+import { GameType, GameLevel, GameResult, EmotionScore, DbGameLevel } from '@/lib/types';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/lib/toast';
 import { useNavigate } from 'react-router-dom';
@@ -54,7 +53,7 @@ const GameContainer: React.FC<GameContainerProps> = ({
         
         setGameId(gameData.id);
         
-        // Load game levels from game_levels table
+        // Load game levels from new game_levels table
         const { data: levelData, error: levelError } = await supabase
           .from('game_levels')
           .select('*')
@@ -63,6 +62,7 @@ const GameContainer: React.FC<GameContainerProps> = ({
           .single();
         
         if (levelError) {
+          console.error('Error loading game level from DB:', levelError);
           // If level not found in database, use backup level data
           const backupLevel: GameLevel = {
             id: levelId,
@@ -77,12 +77,12 @@ const GameContainer: React.FC<GameContainerProps> = ({
         } else {
           // Map database level to GameLevel type
           const gameLevel: GameLevel = {
-            id: levelData.level_number,
-            name: levelData.name || `Level ${levelData.level_number}`,
+            id: levelData.id,
+            name: levelData.name,
             difficulty: levelData.difficulty as 'easy' | 'medium' | 'hard',
-            speed: levelData.speed || levelId * 2,
-            obstacles: levelData.obstacles || levelId * 3,
-            timeLimit: levelData.time_limit || Math.max(60 - (levelId * 5), 30)
+            speed: levelData.speed,
+            obstacles: levelData.obstacles,
+            timeLimit: levelData.time_limit
           };
           
           setLevel(gameLevel);
@@ -122,7 +122,7 @@ const GameContainer: React.FC<GameContainerProps> = ({
   };
   
   const handleGameOver = async (score: number, success: boolean) => {
-    if (!level || !startTime) return;
+    if (!level || !startTime || !gameId) return;
     
     const endTime = Date.now();
     const completionTime = (endTime - startTime) / 1000; // convert to seconds
@@ -178,29 +178,18 @@ const GameContainer: React.FC<GameContainerProps> = ({
         
         if (sentimentError) throw sentimentError;
         
-        // Update leaderboard if score is high
-        const { error: leaderboardError } = await supabase
-          .from('leaderboard')
-          .insert({
-            child_id: childId,
-            child_name: childUser?.name || 'Unknown',
-            avatar_emoji: childUser?.avatarId.toString() || '1',
-            game_id: gameId,
-            game_name: gameType.replace('-', ' ').replace(/\b\w/g, l => l.toUpperCase()),
-            game_slug: gameType,
-            difficulty: level.difficulty,
-            score: score,
-            created_at: new Date().toISOString()
-          });
+        // Update leaderboard via direct insert to the games table
+        const gameNameStr = gameType.replace('-', ' ').replace(/\b\w/g, l => l.toUpperCase());
         
-        if (leaderboardError) console.error('Error updating leaderboard:', leaderboardError);
+        // Instead of inserting directly to leaderboard view, insert to game_sessions
+        // The leaderboard view will update automatically
         
         // Create result object for UI
         const result: GameResult = {
           id: sessionData.id,
           childId: childId,
           gameType: gameType as GameType,
-          levelId: level.id,
+          levelId: typeof level.id === 'string' ? parseInt(level.id as string) : level.id as number,
           score: score,
           completionTime: completionTime,
           retryCount: retryCount,
@@ -225,7 +214,6 @@ const GameContainer: React.FC<GameContainerProps> = ({
     }
   };
   
-  // Generate emotion score based on game performance
   const generateEmotionScore = (
     completionTime: number,
     timeLimit: number,
@@ -270,7 +258,6 @@ const GameContainer: React.FC<GameContainerProps> = ({
     };
   };
   
-  // Helper function to calculate standard deviation
   const standardDeviation = (values: number[]): number => {
     if (values.length <= 1) return 0;
     
