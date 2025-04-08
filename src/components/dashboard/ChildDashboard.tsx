@@ -67,7 +67,7 @@ const ChildDashboard: React.FC = () => {
   const getGameDisplayName = (gameType: GameType): string => {
     switch (gameType) {
       case 'mage-run': return 'Mage Run';
-      case 'snake-game': return 'Snake Game';
+      case 'snake-adventure': return 'Snake Game';
       case 'mirror-moves': return 'Mirror Moves';
       case 'maze-runner': return 'Maze Runner';
       default: return 'Unknown Game';
@@ -77,7 +77,7 @@ const ChildDashboard: React.FC = () => {
   const getGameEmoji = (gameType: GameType): string => {
     switch (gameType) {
       case 'mage-run': return '🧙';
-      case 'snake-game': return '🐍';
+      case 'snake-adventure': return '🐍';
       case 'mirror-moves': return '🪞';
       case 'maze-runner': return '🏃';
       default: return '🎮';
@@ -178,7 +178,7 @@ const ChildDashboard: React.FC = () => {
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid grid-cols-2 gap-3">
-              {['mage-run', 'snake-game', 'mirror-moves', 'maze-runner'].map((game) => (
+              {['mage-run', 'snake-adventure', 'mirror-moves', 'maze-runner'].map((game) => (
                 <Button 
                   key={game} 
                   variant="outline"

@@ -11,42 +11,40 @@ export type Database = {
     Tables: {
       children: {
         Row: {
-          age: number | null
-          avatar_emoji: string | null
-          created_at: string
-          id: string
-          name: string
-          parent_id: string
-          updated_at: string
-        }
+          id: string;
+          name: string;
+          parent_id: string;
+          age: number | null;
+          avatar_emoji: string | null;
+          created_at: string;
+          updated_at: string;
+          username: string | null; // add this
+          password: string | null; // add this
+        };
         Insert: {
-          age?: number | null
-          avatar_emoji?: string | null
-          created_at?: string
-          id?: string
-          name: string
-          parent_id: string
-          updated_at?: string
-        }
+          id?: string;
+          name: string;
+          parent_id: string;
+          age?: number | null;
+          avatar_emoji?: string | null;
+          created_at?: string;
+          updated_at?: string;
+          username?: string | null; // add this
+          password?: string | null; // add this
+        };
         Update: {
-          age?: number | null
-          avatar_emoji?: string | null
-          created_at?: string
-          id?: string
-          name?: string
-          parent_id?: string
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "children_parent_id_fkey"
-            columns: ["parent_id"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
+          id?: string;
+          name?: string;
+          parent_id?: string;
+          age?: number | null;
+          avatar_emoji?: string | null;
+          created_at?: string;
+          updated_at?: string;
+          username?: string | null; // add this
+          password?: string | null; // add this
+        };
+      };
+      
       game_levels: {
         Row: {
           created_at: string

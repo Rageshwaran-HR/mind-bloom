@@ -105,7 +105,7 @@ const GamePage: React.FC = () => {
     );
   }
   
-  const validGameType = ['mage-run', 'snake-game', 'mirror-moves', 'maze-runner'].includes(gameType);
+  const validGameType = ['mage-run', 'snake-adventure', 'mirror-moves', 'maze-runner'].includes(gameType);
   
   if (!validGameType) {
     toast.error('Invalid game type');

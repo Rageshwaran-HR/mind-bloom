@@ -71,7 +71,7 @@ const gameLevels: Record<GameType, GameLevel[]> = {
     { id: 2, name: 'Castle Bridge', difficulty: 'medium', speed: 1.2, obstacles: 6, timeLimit: 60 },
     { id: 3, name: 'Dragon Keep', difficulty: 'hard', speed: 1.8, obstacles: 10, timeLimit: 50 },
   ],
-  'snake-game': [
+  'snake-adventure': [
     { id: 1, name: 'Garden Maze', difficulty: 'easy', speed: 0.7, obstacles: 0, timeLimit: 80 }, // Made easier
     { id: 2, name: 'Forest Clearing', difficulty: 'medium', speed: 1.3, obstacles: 2, timeLimit: 60 },
     { id: 3, name: 'Ancient Ruins', difficulty: 'hard', speed: 1.8, obstacles: 4, timeLimit: 50 },
@@ -473,7 +473,7 @@ export const db = {
 // Helper functions
 function createDailyChallenge(childId: string): DailyChallenge {
   // Generate a random game type and level
-  const gameTypes: GameType[] = ['mage-run', 'snake-game', 'mirror-moves', 'maze-runner'];
+  const gameTypes: GameType[] = ['mage-run', 'snake-adventure', 'mirror-moves', 'maze-runner'];
   const randomGameType = gameTypes[Math.floor(Math.random() * gameTypes.length)];
   const levels = gameLevels[randomGameType];
   const randomLevel = levels[Math.floor(Math.random() * levels.length)];

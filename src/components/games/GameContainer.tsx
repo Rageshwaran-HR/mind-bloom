@@ -276,6 +276,37 @@ const GameContainer: React.FC<GameContainerProps> = ({
   const handleFinish = () => {
     navigate('/child-dashboard');
   };
+
+
+
+
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (gameStarted) {
+        // Prevent default behavior for arrow keys
+        if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.key)) {
+          event.preventDefault();
+          // Handle arrow key actions in the game
+          console.log(`Key pressed: ${event.key}`);
+        }
+      }
+    };
+
+    // Attach keydown event listener
+    window.addEventListener('keydown', handleKeyDown);
+
+    // Cleanup event listener on component unmount or game stop
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [gameStarted]);
+
+
+
+  const stopGame = () => {
+    setGameStarted(false);
+  };
   
   const getGameInstructions = () => {
     switch (gameType) {
@@ -292,7 +323,7 @@ const GameContainer: React.FC<GameContainerProps> = ({
             </ul>
           </div>
         );
-      case 'snake-game':
+      case 'snake-adventure':
         return (
           <div className="text-white">
             <h3 className="text-xl font-bold mb-3">How to Play Snake Game</h3>
@@ -348,8 +379,8 @@ const GameContainer: React.FC<GameContainerProps> = ({
     switch (gameType) {
       case 'mage-run':
         return <MageRun {...props} />;
-      case 'snake-game':
-        return <SnakeGame {...props} />;
+      case 'snake-adventure':
+        return <SnakeGame {...props} onGameOver={(success) => handleGameOver(0, success)} />;
       case 'mirror-moves':
         return <MirrorMoves {...props} />;
       case 'maze-runner':
@@ -362,7 +393,7 @@ const GameContainer: React.FC<GameContainerProps> = ({
   const getGameTitle = () => {
     switch (gameType) {
       case 'mage-run': return 'Mage Run';
-      case 'snake-game': return 'Snake Game';
+      case 'snake-adventure': return 'Snake Game';
       case 'mirror-moves': return 'Mirror Moves';
       case 'maze-runner': return 'Maze Runner';
       default: return 'Game';
@@ -474,6 +505,7 @@ const GameContainer: React.FC<GameContainerProps> = ({
                 >
                   {retryCount === 0 ? 'Start Game' : 'Retry'}
                 </Button>
+                <button onClick={stopGame}>Stop Game</button>
               </div>
             )}
           </div>

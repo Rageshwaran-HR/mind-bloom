@@ -2,20 +2,23 @@
 // User types
 export interface User {
   id: string;
+  name: string;
   email: string;
   isParent: boolean;
-  name: string;
+  avatarUrl: string; // Added avatarUrl property
   createdAt: string;
+  updatedAt: string;
 }
 
 export interface ChildUser extends User {
+  id: string;
+  name: string;
   parentId: string;
   avatarId: number;
-  avatarUrl?: string; // For image-based avatars
   streakDays: number;
-  lastPlayDate?: string;
-  username?: string; // For child login
-  password?: string; // For child login (will be hashed in the actual database)
+  email: string;
+  createdAt: string;
+  updatedAt: string; 
 }
 
 export interface ParentUser extends User {
@@ -23,7 +26,7 @@ export interface ParentUser extends User {
 }
 
 // Game related types
-export type GameType = 'mage-run' | 'snake-game' | 'mirror-moves' | 'maze-runner';
+export type GameType = 'mage-run' | 'snake-adventure' | 'mirror-moves' | 'maze-runner';
 
 export interface GameLevel {
   id: number | string;

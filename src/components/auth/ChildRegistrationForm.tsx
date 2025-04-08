@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -112,34 +111,31 @@ const ChildRegistrationForm: React.FC<{ onSuccess?: () => void }> = ({ onSuccess
           </div>
           
           <div className="space-y-2">
-            <Label>Select an Avatar</Label>
-            <div className="grid grid-cols-3 gap-4">
+            <Label htmlFor="avatar">Avatar</Label>
+            <div className="flex space-x-2">
               {avatars.map((avatar) => (
                 <button
                   key={avatar}
                   type="button"
-                  className={`p-2 rounded-full overflow-hidden transition-all ${
-                    selectedAvatar === avatar
-                      ? 'ring-4 ring-mindbloom-purple scale-105'
-                      : 'hover:scale-105'
-                  }`}
+                  className={`w-10 h-10 rounded-full ${selectedAvatar === avatar ? 'ring-2 ring-offset-2 ring-offset-white ring-primary' : ''}`}
                   onClick={() => setSelectedAvatar(avatar)}
                 >
-                  <div 
-                    className="w-20 h-20 rounded-full bg-gradient-to-br from-mindbloom-purple to-mindbloom-blue flex items-center justify-center text-white text-2xl font-bold"
-                  >
-                    {avatar}
-                  </div>
+                  <img src={`/avatars/${avatar}.png`} alt={`Avatar ${avatar}`} />
                 </button>
               ))}
             </div>
           </div>
           
           <Button type="submit" className="w-full gradient-bg" disabled={isSubmitting}>
-            {isSubmitting ? 'Creating profile...' : 'Create Profile'}
+            {isSubmitting ? 'Creating profile...' : 'Create profile'}
           </Button>
         </form>
       </CardContent>
+      <CardFooter className="flex justify-center">
+        <Button variant="link" onClick={onSuccess}>
+          Done
+        </Button>
+      </CardFooter>
     </Card>
   );
 };
