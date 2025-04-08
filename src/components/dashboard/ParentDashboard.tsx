@@ -7,7 +7,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { useAuth } from '@/contexts/AuthContext';
 import { db } from '@/lib/mockDatabase';
 import { ChildUser, EmotionScore } from '@/lib/types';
-import { toast } from '@/components/ui/sonner';
+import { toast } from '@/lib/toast';
 import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import ChildRegistrationForm from '../auth/ChildRegistrationForm';
 

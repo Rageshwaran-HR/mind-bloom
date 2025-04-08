@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { GameType, GameLevel, GameResult, EmotionScore } from '@/lib/types';
 import { db, generateEmotionScore } from '@/lib/mockDatabase';
-import { toast } from '@/components/ui/sonner';
+import { toast } from '@/lib/toast';
 import { useNavigate } from 'react-router-dom';
 import MageRun from './MageRun';
 import SnakeGame from './SnakeGame';

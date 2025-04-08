@@ -1,10 +1,9 @@
-
 import React from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import ChildDashboard from '@/components/dashboard/ChildDashboard';
-import { toast } from '@/components/ui/sonner';
+import { toast } from '@/lib/toast';
 
 const ChildDashboardPage: React.FC = () => {
   const { user, childUser, logout } = useAuth();

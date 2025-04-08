@@ -1,8 +1,7 @@
-
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { User, ParentUser, ChildUser } from '@/lib/types';
 import { db } from '@/lib/mockDatabase';
-import { toast } from '@/components/ui/sonner';
+import { toast } from '@/lib/toast';
 
 interface AuthContextType {
   user: User | null;
@@ -26,7 +25,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [parentUser, setParentUser] = useState<ParentUser | null>(null);
   const [childUser, setChildUser] = useState<ChildUser | null>(null);
   
-  // Check for existing session
   useEffect(() => {
     const storedUser = localStorage.getItem('mindbloom_user');
     if (storedUser) {
@@ -58,7 +56,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           setUser(child);
           setChildUser(child);
           
-          // Also load parent
           const parent = await db.getParent(child.parentId);
           setParentUser(parent);
         }
@@ -123,7 +120,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const newChild = await db.createChild(parentUser.id, name, avatarId);
       toast.success(`Added ${name}'s profile!`);
       
-      // Refresh parent to include new child
       const refreshedParent = await db.getParent(parentUser.id);
       if (refreshedParent) {
         setParentUser(refreshedParent);
