@@ -1,4 +1,4 @@
-import { User, ChildUser, ParentUser, GameResult, DailyChallenge, LeaderboardEntry, GameLevel, GameType, EmotionScore } from './types';
+import { User, ChildUser, ParentUser, GameResult, DailyChallenge, LeaderboardEntry, GameLevel, GameType, EmotionScore, Achievement, ChildAchievement } from './types';
 import { v4 as uuidv4 } from 'uuid';
 
 // Mock in-memory database for development
@@ -6,28 +6,85 @@ const users: User[] = [];
 const childCredentials: Map<string, {username: string, password: string}> = new Map();
 const gameResults: GameResult[] = [];
 const dailyChallenges: DailyChallenge[] = [];
+const childAchievements: ChildAchievement[] = [];
 
-// Define game levels
+// Avatar options
+export const avatarOptions = [
+  { id: 1, url: '/avatars/kid-avatar-1.png', name: 'Happy Kid' },
+  { id: 2, url: '/avatars/kid-avatar-2.png', name: 'Cool Kid' },
+  { id: 3, url: '/avatars/kid-avatar-3.png', name: 'Smart Kid' },
+  { id: 4, url: '/avatars/kid-avatar-4.png', name: 'Creative Kid' },
+  { id: 5, url: '/avatars/kid-avatar-5.png', name: 'Adventurous Kid' },
+  { id: 6, url: '/avatars/kid-avatar-6.png', name: 'Curious Kid' },
+];
+
+// Achievement definitions
+export const achievements: Achievement[] = [
+  {
+    id: '1',
+    title: 'First Steps',
+    description: 'Play your first game',
+    icon: '🎮',
+    maxProgress: 1
+  },
+  {
+    id: '2',
+    title: 'Quick Learner',
+    description: 'Complete 5 games',
+    icon: '🧠',
+    maxProgress: 5
+  },
+  {
+    id: '3',
+    title: 'Focus Master',
+    description: 'Achieve a focus score of over 80%',
+    icon: '🔍',
+    maxProgress: 1
+  },
+  {
+    id: '4',
+    title: 'Streak Champion',
+    description: 'Maintain a 5-day streak',
+    icon: '🔥',
+    maxProgress: 5
+  },
+  {
+    id: '5',
+    title: 'Joy Seeker',
+    description: 'Achieve a joy score of over 85%',
+    icon: '😄',
+    maxProgress: 1
+  },
+  {
+    id: '6',
+    title: 'Game Master',
+    description: 'Complete all game types',
+    icon: '🏆',
+    maxProgress: 4
+  }
+];
+
+// Define game levels with adjusted difficulty for easy levels
 const gameLevels: Record<GameType, GameLevel[]> = {
   'mage-run': [
-    { id: 1, name: 'Forest Path', difficulty: 'easy', speed: 1, obstacles: 5, timeLimit: 60 },
-    { id: 2, name: 'Castle Bridge', difficulty: 'medium', speed: 1.5, obstacles: 8, timeLimit: 50 },
-    { id: 3, name: 'Dragon Keep', difficulty: 'hard', speed: 2, obstacles: 12, timeLimit: 45 },
+    { id: 1, name: 'Forest Path', difficulty: 'easy', speed: 0.7, obstacles: 3, timeLimit: 80 }, // Made easier
+    { id: 2, name: 'Castle Bridge', difficulty: 'medium', speed: 1.2, obstacles: 6, timeLimit: 60 },
+    { id: 3, name: 'Dragon Keep', difficulty: 'hard', speed: 1.8, obstacles: 10, timeLimit: 50 },
   ],
   'snake-game': [
-    { id: 1, name: 'Garden Maze', difficulty: 'easy', speed: 1, obstacles: 0, timeLimit: 60 },
-    { id: 2, name: 'Forest Clearing', difficulty: 'medium', speed: 1.5, obstacles: 3, timeLimit: 50 },
-    { id: 3, name: 'Ancient Ruins', difficulty: 'hard', speed: 2, obstacles: 5, timeLimit: 45 },
+    { id: 1, name: 'Garden Maze', difficulty: 'easy', speed: 0.7, obstacles: 0, timeLimit: 80 }, // Made easier
+    { id: 2, name: 'Forest Clearing', difficulty: 'medium', speed: 1.3, obstacles: 2, timeLimit: 60 },
+    { id: 3, name: 'Ancient Ruins', difficulty: 'hard', speed: 1.8, obstacles: 4, timeLimit: 50 },
   ],
   'mirror-moves': [
-    { id: 1, name: 'Village Square', difficulty: 'easy', speed: 1, obstacles: 0, timeLimit: 45 },
-    { id: 2, name: 'Crystal Cave', difficulty: 'medium', speed: 1.5, obstacles: 0, timeLimit: 40 },
-    { id: 3, name: 'Mystic Temple', difficulty: 'hard', speed: 2, obstacles: 0, timeLimit: 30 },
+    { id: 1, name: 'Village Square', difficulty: 'easy', speed: 0.7, obstacles: 0, timeLimit: 60 }, // Made easier
+    { id: 2, name: 'Crystal Cave', difficulty: 'medium', speed: 1.3, obstacles: 0, timeLimit: 45 },
+    { id: 3, name: 'Mystic Temple', difficulty: 'hard', speed: 1.8, obstacles: 0, timeLimit: 35 },
   ],
   'maze-runner': [
-    { id: 1, name: 'Hedge Maze', difficulty: 'easy', speed: 1, obstacles: 0, timeLimit: 60 },
+    { id: 1, name: 'Hedge Maze', difficulty: 'easy', speed: 0.8, obstacles: 0, timeLimit: 80 }, // Made easier
     { id: 2, name: 'Desert Labyrinth', difficulty: 'medium', speed: 1, obstacles: 0, timeLimit: 75 },
-    { id: 3, name: 'Ice Cavern', difficulty: 'hard', speed: 1, obstacles: 3, timeLimit: 90 },
+    { id: 3, name: 'Ice Cavern', difficulty: 'hard', speed: 1, obstacles: 2, timeLimit: 90 },
   ],
 };
 
@@ -65,7 +122,11 @@ export const db = {
 
   childLogin: async (username: string, password: string): Promise<ChildUser> => {
     // Find child with matching username
-    const childUser = users.find(u => !u.isParent) as ChildUser | undefined;
+    const childUsers = users.filter(u => !u.isParent) as ChildUser[];
+    const childUser = childUsers.find(child => 
+      child.username && child.username.toLowerCase() === username.toLowerCase()
+    );
+    
     if (!childUser) {
       throw new Error('Child not found');
     }
@@ -92,6 +153,8 @@ export const db = {
     }
     
     const childId = uuidv4();
+    const avatar = avatarOptions.find(a => a.id === avatarId);
+    
     const childUser: ChildUser = {
       id: childId,
       email: `${name.toLowerCase()}_${Date.now()}@child.mindbloom.com`,
@@ -99,6 +162,7 @@ export const db = {
       name,
       parentId,
       avatarId,
+      avatarUrl: avatar?.url,
       streakDays: 0,
       createdAt: new Date().toISOString(),
       username
@@ -112,6 +176,9 @@ export const db = {
     
     // Create first daily challenge
     createDailyChallenge(childUser.id);
+    
+    // Add first achievement - First Steps
+    createChildAchievement(childUser.id, '1', 0, 1);
     
     return childUser;
   },
@@ -157,6 +224,11 @@ export const db = {
         yesterday.setDate(yesterday.getDate() - 1);
         if (lastPlay === yesterday.toDateString()) {
           child.streakDays += 1;
+          
+          // Check for streak achievement
+          if (child.streakDays >= 5) {
+            updateAchievementProgress(child.id, '4', 5);
+          }
         } else {
           child.streakDays = 1; // Reset streak
         }
@@ -176,6 +248,29 @@ export const db = {
       if (challenge) {
         challenge.completed = true;
       }
+      
+      // Update achievements
+      // First Steps achievement - Just playing a game completes this
+      updateAchievementProgress(child.id, '1', 1);
+      
+      // Quick Learner achievement - Complete 5 games
+      const completedGames = gameResults.filter(gr => gr.childId === child.id).length + 1;
+      updateAchievementProgress(child.id, '2', Math.min(completedGames, 5));
+      
+      // Focus Master achievement
+      if (result.emotionScore.focus >= 0.8) {
+        updateAchievementProgress(child.id, '3', 1);
+      }
+      
+      // Joy Seeker achievement
+      if (result.emotionScore.joy >= 0.85) {
+        updateAchievementProgress(child.id, '5', 1);
+      }
+      
+      // Game Master achievement - Complete all game types
+      const uniqueGames = new Set(gameResults.filter(gr => gr.childId === child.id).map(gr => gr.gameType));
+      uniqueGames.add(result.gameType);
+      updateAchievementProgress(child.id, '6', Math.min(uniqueGames.size, 4));
     }
     
     return newResult;
@@ -226,6 +321,7 @@ export const db = {
       childId: child.id,
       childName: child.name,
       avatarId: child.avatarId,
+      avatarUrl: child.avatarUrl,
       score: leaderboardMap.get(child.id) || 0,
       rank: 0, // Will be calculated below
     })).sort((a, b) => b.score - a.score);
@@ -279,6 +375,98 @@ export const db = {
         }
       };
     }).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+  },
+  
+  // Achievements
+  getChildAchievements: async (childId: string): Promise<Achievement[]> => {
+    // Get all the child's achievement progress
+    const childAchievementList = childAchievements.filter(ca => ca.childId === childId);
+    
+    // Map the achievement definitions with the child's progress
+    return achievements.map(achievement => {
+      const childAchievement = childAchievementList.find(ca => ca.achievementId === achievement.id);
+      
+      if (!childAchievement) {
+        return {
+          ...achievement,
+          progress: 0,
+          unlockedAt: undefined
+        };
+      }
+      
+      return {
+        ...achievement,
+        progress: childAchievement.progress,
+        maxProgress: childAchievement.maxProgress,
+        unlockedAt: childAchievement.progress >= childAchievement.maxProgress ? childAchievement.unlockedAt : undefined
+      };
+    });
+  },
+  
+  getSentimentInsight: async (childId: string): Promise<string> => {
+    const trends = await db.getEmotionTrends(childId);
+    
+    if (trends.length === 0) return "No data available yet.";
+    
+    const latest = trends[trends.length - 1].emotions;
+    const trend = trends.length > 1
+      ? trends[trends.length - 1].emotions.overall - trends[trends.length - 2].emotions.overall
+      : 0;
+    
+    // Generate more detailed and personalized insights based on the emotional data
+    const insights = [];
+    
+    // Detect emotional patterns and provide more specific feedback
+    if (latest.overall > 0.7) {
+      insights.push("Your child is showing excellent emotional well-being! They appear to be thriving in their activities.");
+    } else if (latest.overall > 0.3) {
+      insights.push("Your child is showing good emotional balance. Their mental health indicators are positive.");
+    } else if (latest.overall > 0) {
+      insights.push("Your child's emotional state is generally neutral. Some activities might help boost their engagement.");
+    } else if (latest.overall > -0.3) {
+      insights.push("Your child may be experiencing some minor challenges. Consider checking in to provide support.");
+    } else {
+      insights.push("Your child might be struggling emotionally. We recommend having a conversation about their experience.");
+    }
+    
+    // Add trend-based insights
+    if (trend > 0.3) {
+      insights.push("There's been a significant positive improvement in their emotional state recently!");
+    } else if (trend > 0.1) {
+      insights.push("Their emotional well-being is showing a positive trend.");
+    } else if (trend < -0.3) {
+      insights.push("There's been a notable decline in their emotional indicators. Consider exploring the cause.");
+    } else if (trend < -0.1) {
+      insights.push("Their emotional state has slightly decreased recently.");
+    }
+    
+    // Add specific insights based on individual metrics
+    if (latest.joy < 0.3) {
+      insights.push("Joy levels are quite low. Consider activities that promote fun and positive experiences.");
+    } else if (latest.joy > 0.8) {
+      insights.push("They're showing high levels of joy and happiness in their activities!");
+    }
+    
+    if (latest.frustration > 0.7) {
+      insights.push("Frustration levels are elevated. The activities might be too challenging or causing stress.");
+    } else if (latest.frustration < 0.2) {
+      insights.push("They're managing challenges well with minimal frustration.");
+    }
+    
+    if (latest.focus < 0.4) {
+      insights.push("Focus levels are lower than ideal. They might benefit from shorter, more engaging sessions.");
+    } else if (latest.focus > 0.8) {
+      insights.push("Their ability to focus is excellent! They're showing strong concentration skills.");
+    }
+    
+    if (latest.engagement < 0.4) {
+      insights.push("Engagement is low. They might need more stimulating or varied activities.");
+    } else if (latest.engagement > 0.8) {
+      insights.push("They're highly engaged with the activities, showing strong interest and participation!");
+    }
+    
+    // Return a subset of insights to avoid overwhelming
+    return insights.slice(0, 3).join(' ');
   }
 };
 
@@ -303,7 +491,46 @@ function createDailyChallenge(childId: string): DailyChallenge {
   return challenge;
 }
 
-// Generate emotion score based on game performance
+// Create/update achievement progress for a child
+function createChildAchievement(childId: string, achievementId: string, progress: number, maxProgress: number): void {
+  const now = new Date().toISOString();
+  const existing = childAchievements.find(ca => ca.childId === childId && ca.achievementId === achievementId);
+  
+  if (existing) {
+    existing.progress = progress;
+    if (progress >= maxProgress && !existing.unlockedAt) {
+      existing.unlockedAt = now;
+    }
+  } else {
+    childAchievements.push({
+      childId,
+      achievementId,
+      progress,
+      maxProgress,
+      unlockedAt: progress >= maxProgress ? now : ''
+    });
+  }
+}
+
+// Update achievement progress
+function updateAchievementProgress(childId: string, achievementId: string, progress: number): void {
+  const achievement = achievements.find(a => a.id === achievementId);
+  if (!achievement) return;
+  
+  const existing = childAchievements.find(ca => ca.childId === childId && ca.achievementId === achievementId);
+  const maxProgress = achievement.maxProgress || 1;
+  
+  if (existing) {
+    existing.progress = Math.max(existing.progress, progress);
+    if (existing.progress >= maxProgress && !existing.unlockedAt) {
+      existing.unlockedAt = new Date().toISOString();
+    }
+  } else {
+    createChildAchievement(childId, achievementId, progress, maxProgress);
+  }
+}
+
+// Generate emotion score based on game performance with improved algorithm
 export function generateEmotionScore(
   completionTime: number,
   timeLimit: number,
@@ -311,23 +538,47 @@ export function generateEmotionScore(
   successRate: number,
   reactionTimes: number[]
 ): EmotionScore {
-  // Normalize values
-  const timeRatio = Math.min(timeLimit / completionTime, 1); // Higher is better
-  const retryFactor = Math.max(0, 1 - retryCount * 0.1); // Lower retry count is better
+  // More sophisticated analysis of reaction times
   const avgReactionTime = reactionTimes.length ? 
     reactionTimes.reduce((sum, time) => sum + time, 0) / reactionTimes.length : 
     500; // Default to 500ms
   
-  const reactionFactor = Math.min(Math.max(1 - (avgReactionTime - 200) / 800, 0), 1); // 200ms-1000ms range
+  // Analyze consistency in reaction times (lower variance is better)
+  const reactionTimeVariance = reactionTimes.length > 1 ?
+    Math.sqrt(reactionTimes.reduce((sum, time) => sum + Math.pow(time - avgReactionTime, 2), 0) / reactionTimes.length) / avgReactionTime :
+    0.5; // Default to medium variance
   
-  // Calculate emotion scores
-  const joy = timeRatio * 0.3 + successRate * 0.5 + retryFactor * 0.2;
-  const frustration = (1 - successRate) * 0.4 + retryCount * 0.1 + (1 - timeRatio) * 0.2;
-  const engagement = reactionFactor * 0.6 + (retryCount > 0 ? 0.3 : 0) + successRate * 0.3;
-  const focus = reactionFactor * 0.7 + timeRatio * 0.3;
+  // Calculate time efficiency (how well they used available time)
+  const timeEfficiency = Math.min(timeLimit / completionTime, 1.5); // Allow overperformance up to 150%
+  const normalizedTimeEfficiency = Math.min(Math.max(timeEfficiency, 0.5), 1.5) / 1.5; // Normalize to 0-1
   
-  // Calculate overall score (-1 to 1 range)
-  const overall = (joy * 0.4 + engagement * 0.3 + focus * 0.3) - (frustration * 0.8);
+  // Calculate retry impact - diminish for each retry
+  const retryFactor = Math.max(0, 1 - retryCount * 0.15);
+  
+  // More nuanced reaction factor - rewards both speed and consistency
+  const reactionSpeed = Math.min(Math.max(1 - (avgReactionTime - 200) / 800, 0), 1);
+  const reactionConsistency = Math.min(Math.max(1 - reactionTimeVariance, 0), 1);
+  const reactionFactor = reactionSpeed * 0.6 + reactionConsistency * 0.4;
+  
+  // Calculate emotion scores with more subtle interactions
+  const joy = successRate * 0.4 + normalizedTimeEfficiency * 0.3 + retryFactor * 0.1 + reactionConsistency * 0.2;
+  
+  const frustration = (1 - successRate) * 0.3 + 
+                    retryCount * 0.15 + 
+                    (1 - normalizedTimeEfficiency) * 0.15 + 
+                    (1 - reactionConsistency) * 0.4;
+  
+  const engagement = reactionFactor * 0.3 + 
+                   (retryCount > 0 ? Math.min(0.3, retryCount * 0.1) : 0) + 
+                   successRate * 0.2 + 
+                   Math.min(timeEfficiency, 1) * 0.2;
+  
+  const focus = reactionConsistency * 0.5 + 
+              normalizedTimeEfficiency * 0.3 + 
+              (1 - Math.min(retryCount * 0.1, 0.2));
+  
+  // Calculate overall score (-1 to 1 range) with more balanced weighting
+  const overall = (joy * 0.35 + engagement * 0.25 + focus * 0.25) - (frustration * 0.7);
   
   return {
     joy: Math.min(Math.max(joy, 0), 1),

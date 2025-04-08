@@ -5,11 +5,13 @@ import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { useAuth } from '@/contexts/AuthContext';
-import { db } from '@/lib/mockDatabase';
+import { db, avatarOptions } from '@/lib/mockDatabase';
 import { ChildUser, EmotionScore } from '@/lib/types';
 import { toast } from '@/lib/toast';
-import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
+import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, PieChart, Pie, Cell, RadarChart, PolarGrid, PolarAngleAxis, Radar } from 'recharts';
 import ChildRegistrationForm from '../auth/ChildRegistrationForm';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { InfoIcon, Brain, Zap, Smile, Activity, AlertCircle } from 'lucide-react';
 
 interface EmotionTrend {
   date: string;
@@ -21,6 +23,7 @@ const ParentDashboard: React.FC = () => {
   const [emotionTrends, setEmotionTrends] = useState<EmotionTrend[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showAddChild, setShowAddChild] = useState(false);
+  const [sentimentInsight, setSentimentInsight] = useState<string>("");
   
   const { parentUser, childUser, switchToChild } = useAuth();
   
@@ -38,17 +41,22 @@ const ParentDashboard: React.FC = () => {
   useEffect(() => {
     if (!selectedChildId) return;
     
-    const fetchEmotionTrends = async () => {
+    const fetchData = async () => {
       try {
+        // Fetch emotion trends
         const trends = await db.getEmotionTrends(selectedChildId);
         setEmotionTrends(trends);
+        
+        // Fetch sentiment insights
+        const insight = await db.getSentimentInsight(selectedChildId);
+        setSentimentInsight(insight);
       } catch (error) {
-        console.error('Error fetching emotion trends:', error);
+        console.error('Error fetching emotion data:', error);
         toast.error('Failed to load emotion data');
       }
     };
     
-    fetchEmotionTrends();
+    fetchData();
   }, [selectedChildId]);
   
   const handleChildSelect = (childId: string) => {
@@ -69,60 +77,32 @@ const ParentDashboard: React.FC = () => {
     return 'text-red-500';
   };
   
-  const getEmotionInsight = (emotions: EmotionTrend[]) => {
-    if (emotions.length === 0) return "No data available yet.";
-    
-    // Get the most recent emotion data
-    const latest = emotions[emotions.length - 1].emotions;
-    
-    // Get trends by comparing to previous data
-    const trend = emotions.length > 1
-      ? emotions[emotions.length - 1].emotions.overall - emotions[emotions.length - 2].emotions.overall
-      : 0;
-    
-    const insights = [];
-    
-    // Overall sentiment
-    if (latest.overall > 0.6) {
-      insights.push("Overall positive emotional state. Doing great!");
-    } else if (latest.overall > 0.2) {
-      insights.push("Balanced emotional state with room for improvement.");
-    } else if (latest.overall > -0.2) {
-      insights.push("Neutral emotional state. Pay attention to any changes.");
-    } else {
-      insights.push("Showing signs of negative emotional state. Consider checking in.");
+  const getEmotionIcon = (type: string) => {
+    switch (type) {
+      case 'joy':
+        return <Smile className="w-5 h-5" />;
+      case 'focus':
+        return <Zap className="w-5 h-5" />;
+      case 'engagement':
+        return <Activity className="w-5 h-5" />;
+      case 'frustration':
+        return <AlertCircle className="w-5 h-5" />;
+      case 'overall':
+        return <Brain className="w-5 h-5" />;
+      default:
+        return <InfoIcon className="w-5 h-5" />;
     }
-    
-    // Trend insight
-    if (trend > 0.2) {
-      insights.push("Significant positive improvement recently.");
-    } else if (trend < -0.2) {
-      insights.push("Recent decline in emotional wellbeing.");
-    }
-    
-    // Specific emotion insights
-    if (latest.frustration > 0.7) {
-      insights.push("Higher levels of frustration detected. May need support.");
-    }
-    
-    if (latest.engagement < 0.3) {
-      insights.push("Low engagement levels. Might be losing interest.");
-    }
-    
-    if (latest.joy < 0.3) {
-      insights.push("Joy levels are lower than usual.");
-    }
-    
-    if (latest.focus < 0.4) {
-      insights.push("Focus seems to be challenging. Consider shorter sessions.");
-    }
-    
-    return insights.join(' ');
   };
   
   const getSelectedChild = (): ChildUser | undefined => {
     if (!parentUser || !selectedChildId) return undefined;
     return parentUser.children.find(child => child.id === selectedChildId);
+  };
+  
+  // Helper function to get avatar URL from avatarId
+  const getAvatarUrl = (avatarId: number) => {
+    const avatar = avatarOptions.find(a => a.id === avatarId);
+    return avatar?.url;
   };
   
   if (isLoading) {
@@ -157,13 +137,14 @@ const ParentDashboard: React.FC = () => {
                   onClick={() => handleChildSelect(child.id)}
                 >
                   <div className="flex items-center mb-2">
-                    <div className={`w-10 h-10 rounded-full ${
-                      selectedChildId === child.id
-                        ? 'bg-white text-mindbloom-purple'
-                        : 'bg-mindbloom-purple text-white'
-                    } flex items-center justify-center font-bold mr-3`}>
-                      {child.avatarId}
-                    </div>
+                    <Avatar className="h-10 w-10 mr-3">
+                      <AvatarImage src={child.avatarUrl || undefined} alt={child.name} />
+                      <AvatarFallback className={`${
+                        selectedChildId === child.id
+                          ? 'bg-white text-mindbloom-purple'
+                          : 'bg-mindbloom-purple text-white'
+                      }`}>{child.avatarId}</AvatarFallback>
+                    </Avatar>
                     <span className="font-medium">{child.name}</span>
                   </div>
                   <div className="flex justify-between text-sm">
@@ -209,7 +190,15 @@ const ParentDashboard: React.FC = () => {
         
         <Card className="xl:col-span-3">
           <CardHeader>
-            <CardTitle>{getSelectedChild()?.name}'s Dashboard</CardTitle>
+            <CardTitle className="flex items-center">
+              {getSelectedChild()?.name}'s Dashboard
+              {getSelectedChild()?.avatarUrl && (
+                <Avatar className="h-8 w-8 ml-2">
+                  <AvatarImage src={getSelectedChild()?.avatarUrl} alt={getSelectedChild()?.name} />
+                  <AvatarFallback>{getSelectedChild()?.avatarId}</AvatarFallback>
+                </Avatar>
+              )}
+            </CardTitle>
             <CardDescription>Mental health insights and trends</CardDescription>
           </CardHeader>
           <CardContent>
@@ -221,24 +210,31 @@ const ParentDashboard: React.FC = () => {
                       <TabsTrigger value="overview">Overview</TabsTrigger>
                       <TabsTrigger value="emotions">Emotions</TabsTrigger>
                       <TabsTrigger value="engagement">Engagement</TabsTrigger>
+                      <TabsTrigger value="detailed">Detailed Analysis</TabsTrigger>
                     </TabsList>
                     
                     <TabsContent value="overview">
                       <div className="mb-6">
                         <Card>
                           <CardHeader className="pb-2">
-                            <CardTitle className="text-lg">Mental Health Summary</CardTitle>
+                            <CardTitle className="text-lg flex items-center">
+                              <Brain className="w-5 h-5 mr-2 text-mindbloom-purple" />
+                              Mental Health Summary
+                            </CardTitle>
                           </CardHeader>
                           <CardContent>
                             <p className="text-muted-foreground">
-                              {getEmotionInsight(emotionTrends)}
+                              {sentimentInsight}
                             </p>
                           </CardContent>
                         </Card>
                       </div>
                       
                       <div className="h-[300px] mb-6">
-                        <h3 className="text-lg font-medium mb-2">Overall Emotional Wellbeing</h3>
+                        <h3 className="text-lg font-medium mb-2 flex items-center">
+                          <Activity className="w-5 h-5 mr-2 text-mindbloom-purple" />
+                          Overall Emotional Wellbeing
+                        </h3>
                         <ResponsiveContainer width="100%" height="100%">
                           <AreaChart
                             data={emotionTrends}
@@ -276,7 +272,10 @@ const ParentDashboard: React.FC = () => {
                             <Card>
                               <CardContent className="pt-6">
                                 <div className="text-center">
-                                  <p className="text-sm font-medium text-muted-foreground mb-1">Joy</p>
+                                  <div className="flex justify-center items-center mb-2">
+                                    <Smile className="w-5 h-5 text-green-500 mr-2" />
+                                    <p className="text-sm font-medium text-muted-foreground">Joy</p>
+                                  </div>
                                   <p className={`text-2xl font-bold ${
                                     getScoreColor(emotionTrends[emotionTrends.length - 1].emotions.joy)
                                   }`}>
@@ -289,7 +288,10 @@ const ParentDashboard: React.FC = () => {
                             <Card>
                               <CardContent className="pt-6">
                                 <div className="text-center">
-                                  <p className="text-sm font-medium text-muted-foreground mb-1">Focus</p>
+                                  <div className="flex justify-center items-center mb-2">
+                                    <Zap className="w-5 h-5 text-blue-500 mr-2" />
+                                    <p className="text-sm font-medium text-muted-foreground">Focus</p>
+                                  </div>
                                   <p className={`text-2xl font-bold ${
                                     getScoreColor(emotionTrends[emotionTrends.length - 1].emotions.focus)
                                   }`}>
@@ -302,7 +304,10 @@ const ParentDashboard: React.FC = () => {
                             <Card>
                               <CardContent className="pt-6">
                                 <div className="text-center">
-                                  <p className="text-sm font-medium text-muted-foreground mb-1">Engagement</p>
+                                  <div className="flex justify-center items-center mb-2">
+                                    <Activity className="w-5 h-5 text-purple-500 mr-2" />
+                                    <p className="text-sm font-medium text-muted-foreground">Engagement</p>
+                                  </div>
                                   <p className={`text-2xl font-bold ${
                                     getScoreColor(emotionTrends[emotionTrends.length - 1].emotions.engagement)
                                   }`}>
@@ -315,7 +320,10 @@ const ParentDashboard: React.FC = () => {
                             <Card>
                               <CardContent className="pt-6">
                                 <div className="text-center">
-                                  <p className="text-sm font-medium text-muted-foreground mb-1">Frustration</p>
+                                  <div className="flex justify-center items-center mb-2">
+                                    <AlertCircle className="w-5 h-5 text-orange-500 mr-2" />
+                                    <p className="text-sm font-medium text-muted-foreground">Frustration</p>
+                                  </div>
                                   <p className={`text-2xl font-bold ${
                                     getScoreColor(1 - emotionTrends[emotionTrends.length - 1].emotions.frustration)
                                   }`}>
@@ -412,6 +420,139 @@ const ParentDashboard: React.FC = () => {
                         </ResponsiveContainer>
                       </div>
                     </TabsContent>
+                    
+                    <TabsContent value="detailed">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                        <Card>
+                          <CardHeader>
+                            <CardTitle className="text-lg">Emotion Balance</CardTitle>
+                            <CardDescription>Latest emotional distribution</CardDescription>
+                          </CardHeader>
+                          <CardContent>
+                            <div className="h-[300px]">
+                              {emotionTrends.length > 0 && (
+                                <ResponsiveContainer width="100%" height="100%">
+                                  <PieChart>
+                                    <Pie
+                                      data={[
+                                        { name: 'Joy', value: emotionTrends[emotionTrends.length - 1].emotions.joy },
+                                        { name: 'Focus', value: emotionTrends[emotionTrends.length - 1].emotions.focus },
+                                        { name: 'Engagement', value: emotionTrends[emotionTrends.length - 1].emotions.engagement },
+                                        { name: 'Frustration', value: emotionTrends[emotionTrends.length - 1].emotions.frustration },
+                                      ]}
+                                      cx="50%"
+                                      cy="50%"
+                                      labelLine={false}
+                                      outerRadius={80}
+                                      fill="#8884d8"
+                                      dataKey="value"
+                                      label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                                    >
+                                      <Cell fill="#34D399" />
+                                      <Cell fill="#8B5CF6" />
+                                      <Cell fill="#0EA5E9" />
+                                      <Cell fill="#F97316" />
+                                    </Pie>
+                                    <Tooltip formatter={(value: number) => [(value * 100).toFixed(0) + '%', '']} />
+                                  </PieChart>
+                                </ResponsiveContainer>
+                              )}
+                            </div>
+                          </CardContent>
+                        </Card>
+                        
+                        <Card>
+                          <CardHeader>
+                            <CardTitle className="text-lg">Mental Health Indicators</CardTitle>
+                            <CardDescription>Comprehensive assessment</CardDescription>
+                          </CardHeader>
+                          <CardContent>
+                            <div className="h-[300px]">
+                              {emotionTrends.length > 0 && (
+                                <ResponsiveContainer width="100%" height="100%">
+                                  <RadarChart cx="50%" cy="50%" outerRadius="80%" data={[
+                                    {
+                                      subject: 'Joy',
+                                      A: emotionTrends[emotionTrends.length - 1].emotions.joy * 100,
+                                      fullMark: 100,
+                                    },
+                                    {
+                                      subject: 'Focus',
+                                      A: emotionTrends[emotionTrends.length - 1].emotions.focus * 100,
+                                      fullMark: 100,
+                                    },
+                                    {
+                                      subject: 'Engagement',
+                                      A: emotionTrends[emotionTrends.length - 1].emotions.engagement * 100,
+                                      fullMark: 100,
+                                    },
+                                    {
+                                      subject: 'Resilience',
+                                      A: (1 - emotionTrends[emotionTrends.length - 1].emotions.frustration) * 100,
+                                      fullMark: 100,
+                                    },
+                                    {
+                                      subject: 'Overall',
+                                      A: (emotionTrends[emotionTrends.length - 1].emotions.overall + 1) * 50, // Convert -1 to 1 scale to 0-100
+                                      fullMark: 100,
+                                    },
+                                  ]}>
+                                    <PolarGrid />
+                                    <PolarAngleAxis dataKey="subject" />
+                                    <Radar name="Current" dataKey="A" stroke="#8B5CF6" fill="#8B5CF6" fillOpacity={0.6} />
+                                    <Tooltip formatter={(value: number) => [`${value.toFixed(0)}%`, '']} />
+                                  </RadarChart>
+                                </ResponsiveContainer>
+                              )}
+                            </div>
+                          </CardContent>
+                        </Card>
+                      </div>
+                      
+                      <Card>
+                        <CardHeader>
+                          <CardTitle className="text-lg">Sentiment Analysis</CardTitle>
+                          <CardDescription>How your child's mental state changes over time</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="space-y-4">
+                            <p className="text-muted-foreground">
+                              {sentimentInsight}
+                            </p>
+                            
+                            <div className="h-[300px]">
+                              <ResponsiveContainer width="100%" height="100%">
+                                <BarChart
+                                  data={emotionTrends}
+                                  margin={{ top: 10, right: 30, left: 0, bottom: 0 }}
+                                >
+                                  <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
+                                  <XAxis 
+                                    dataKey="date" 
+                                    tickFormatter={formatDate}
+                                    tick={{ fontSize: 12 }}
+                                  />
+                                  <YAxis 
+                                    domain={[-1, 1]} 
+                                    tick={{ fontSize: 12 }}
+                                    tickFormatter={(value) => value.toFixed(1)}
+                                  />
+                                  <Tooltip 
+                                    formatter={(value: number) => [value.toFixed(2), 'Sentiment']}
+                                    labelFormatter={formatDate}
+                                  />
+                                  <Bar 
+                                    dataKey="emotions.overall" 
+                                    name="Sentiment" 
+                                    fill={(entry) => entry.emotions.overall > 0.3 ? '#34D399' : entry.emotions.overall > -0.3 ? '#FCD34D' : '#F87171'}
+                                  />
+                                </BarChart>
+                              </ResponsiveContainer>
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    </TabsContent>
                   </Tabs>
                 ) : (
                   <div className="text-center py-12 text-muted-foreground">
@@ -448,7 +589,7 @@ const ParentDashboard: React.FC = () => {
                     <div className="flex justify-between items-center mb-2">
                       <h4 className="font-medium">{formatDate(entry.date)}</h4>
                       <div 
-                        className={`px-3 py-1 rounded-full text-sm ${
+                        className={`px-3 py-1 rounded-full text-sm flex items-center ${
                           entry.emotions.overall > 0.3 
                             ? 'bg-green-100 text-green-800' 
                             : entry.emotions.overall > -0.3
@@ -456,6 +597,7 @@ const ParentDashboard: React.FC = () => {
                               : 'bg-red-100 text-red-800'
                         }`}
                       >
+                        <Brain className="w-4 h-4 mr-1" />
                         {entry.emotions.overall > 0.3 
                           ? 'Positive' 
                           : entry.emotions.overall > -0.3
@@ -464,27 +606,31 @@ const ParentDashboard: React.FC = () => {
                       </div>
                     </div>
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
-                      <div>
+                      <div className="flex items-center">
+                        <Smile className="w-4 h-4 mr-1 text-green-500" />
                         <span className="text-muted-foreground">Joy: </span>
-                        <span className={getScoreColor(entry.emotions.joy)}>
+                        <span className={`ml-1 ${getScoreColor(entry.emotions.joy)}`}>
                           {(entry.emotions.joy * 100).toFixed(0)}%
                         </span>
                       </div>
-                      <div>
+                      <div className="flex items-center">
+                        <Zap className="w-4 h-4 mr-1 text-blue-500" />
                         <span className="text-muted-foreground">Focus: </span>
-                        <span className={getScoreColor(entry.emotions.focus)}>
+                        <span className={`ml-1 ${getScoreColor(entry.emotions.focus)}`}>
                           {(entry.emotions.focus * 100).toFixed(0)}%
                         </span>
                       </div>
-                      <div>
+                      <div className="flex items-center">
+                        <Activity className="w-4 h-4 mr-1 text-purple-500" />
                         <span className="text-muted-foreground">Engagement: </span>
-                        <span className={getScoreColor(entry.emotions.engagement)}>
+                        <span className={`ml-1 ${getScoreColor(entry.emotions.engagement)}`}>
                           {(entry.emotions.engagement * 100).toFixed(0)}%
                         </span>
                       </div>
-                      <div>
+                      <div className="flex items-center">
+                        <AlertCircle className="w-4 h-4 mr-1 text-orange-500" />
                         <span className="text-muted-foreground">Frustration: </span>
-                        <span className={getScoreColor(1 - entry.emotions.frustration)}>
+                        <span className={`ml-1 ${getScoreColor(1 - entry.emotions.frustration)}`}>
                           {(entry.emotions.frustration * 100).toFixed(0)}%
                         </span>
                       </div>

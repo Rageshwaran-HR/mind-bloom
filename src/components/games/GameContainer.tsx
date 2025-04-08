@@ -10,6 +10,7 @@ import MageRun from './MageRun';
 import SnakeGame from './SnakeGame';
 import MirrorMoves from './MirrorMoves';
 import MazeRunner from './MazeRunner';
+import { Trophy, Clock, BarChart3, Award, Target, ArrowLeft } from 'lucide-react';
 
 interface GameContainerProps {
   gameType: GameType;
@@ -32,6 +33,7 @@ const GameContainer: React.FC<GameContainerProps> = ({
   const [startTime, setStartTime] = useState<number | null>(null);
   const [reactionTimes, setReactionTimes] = useState<number[]>([]);
   const [gameResult, setGameResult] = useState<GameResult | null>(null);
+  const [showGameInstructions, setShowGameInstructions] = useState(true);
   
   const navigate = useNavigate();
   
@@ -59,6 +61,7 @@ const GameContainer: React.FC<GameContainerProps> = ({
   }, [gameType, levelId, navigate]);
   
   const startGame = () => {
+    setShowGameInstructions(false);
     setGameStarted(true);
     setStartTime(Date.now());
     setReactionTimes([]);
@@ -127,6 +130,65 @@ const GameContainer: React.FC<GameContainerProps> = ({
     navigate('/child-dashboard');
   };
   
+  const getGameInstructions = () => {
+    switch (gameType) {
+      case 'mage-run':
+        return (
+          <div className="text-white">
+            <h3 className="text-xl font-bold mb-3">How to Play Mage Run</h3>
+            <ul className="list-disc list-inside space-y-2">
+              <li>Use the arrow keys (↑, ↓, ←, →) to move the mage character</li>
+              <li>Avoid obstacles and enemies</li>
+              <li>Collect magic orbs to gain points</li>
+              <li>Reach the end of the level before time runs out</li>
+              <li>The faster you complete the level, the higher your score!</li>
+            </ul>
+          </div>
+        );
+      case 'snake-game':
+        return (
+          <div className="text-white">
+            <h3 className="text-xl font-bold mb-3">How to Play Snake Game</h3>
+            <ul className="list-disc list-inside space-y-2">
+              <li>Use the arrow keys (↑, ↓, ←, →) to change the snake's direction</li>
+              <li>Eat the food to grow longer and score points</li>
+              <li>Avoid hitting the walls or your own tail</li>
+              <li>The longer your snake gets, the higher your score!</li>
+              <li>Try to survive as long as possible</li>
+            </ul>
+          </div>
+        );
+      case 'mirror-moves':
+        return (
+          <div className="text-white">
+            <h3 className="text-xl font-bold mb-3">How to Play Mirror Moves</h3>
+            <ul className="list-disc list-inside space-y-2">
+              <li>Watch the pattern of lights carefully</li>
+              <li>When it's your turn, repeat the pattern by pressing the matching arrows</li>
+              <li>Each correct sequence gives you points</li>
+              <li>The pattern gets longer and more complex as you progress</li>
+              <li>Try to remember and repeat as many sequences as possible!</li>
+            </ul>
+          </div>
+        );
+      case 'maze-runner':
+        return (
+          <div className="text-white">
+            <h3 className="text-xl font-bold mb-3">How to Play Maze Runner</h3>
+            <ul className="list-disc list-inside space-y-2">
+              <li>Use the arrow keys (↑, ↓, ←, →) to navigate through the maze</li>
+              <li>Find the shortest path to the exit</li>
+              <li>Collect gems along the way for extra points</li>
+              <li>Avoid traps and dead ends</li>
+              <li>Complete the maze as quickly as possible for a higher score!</li>
+            </ul>
+          </div>
+        );
+      default:
+        return <div className="text-white">Use arrow keys to play this game.</div>;
+    }
+  };
+  
   const renderGame = () => {
     if (!level) return null;
     
@@ -160,6 +222,15 @@ const GameContainer: React.FC<GameContainerProps> = ({
     }
   };
   
+  const getDifficultyColor = (difficulty: string) => {
+    switch (difficulty) {
+      case 'easy': return 'text-mindbloom-green bg-mindbloom-green/10';
+      case 'medium': return 'text-amber-500 bg-amber-500/10';
+      case 'hard': return 'text-red-500 bg-red-500/10';
+      default: return 'text-mindbloom-green bg-mindbloom-green/10';
+    }
+  };
+  
   if (isLoading) {
     return (
       <div className="flex justify-center items-center min-h-[400px]">
@@ -190,16 +261,32 @@ const GameContainer: React.FC<GameContainerProps> = ({
     <div className="max-w-4xl mx-auto">
       <Card className="mb-4">
         <CardHeader>
-          <CardTitle className="flex items-center justify-between">
-            <span>{getGameTitle()} - {level.name}</span> 
-            <span className="text-sm font-normal bg-mindbloom-green/10 text-mindbloom-green px-3 py-1 rounded-full">
-              {level.difficulty}
-            </span>
-          </CardTitle>
-          <CardDescription>
+          <div className="flex justify-between items-center">
+            <Button 
+              variant="ghost" 
+              size="sm"
+              className="flex items-center"
+              onClick={() => navigate('/child-dashboard')}
+            >
+              <ArrowLeft className="w-4 h-4 mr-1" />
+              Back to Dashboard
+            </Button>
+            
+            <CardTitle className="flex items-center">
+              <span>{getGameTitle()} - {level.name}</span> 
+              <span className={`text-sm font-normal px-3 py-1 rounded-full ml-2 ${getDifficultyColor(level.difficulty)}`}>
+                {level.difficulty}
+              </span>
+            </CardTitle>
+            
             {isDailyChallenge && (
-              <span className="text-mindbloom-orange font-semibold">Daily Challenge</span>
+              <span className="text-sm text-mindbloom-orange font-semibold bg-mindbloom-orange/10 px-3 py-1 rounded-full">
+                Daily Challenge
+              </span>
             )}
+          </div>
+          <CardDescription className="flex items-center justify-center text-center mt-2">
+            <Clock className="w-4 h-4 mr-1" />
             Time Limit: {level.timeLimit} seconds
           </CardDescription>
         </CardHeader>
@@ -207,45 +294,112 @@ const GameContainer: React.FC<GameContainerProps> = ({
       
       <div className="game-container bg-mindbloom-dark">
         {!gameStarted && !gameCompleted && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/70 z-10 p-6">
-            <h3 className="text-2xl font-bold text-white mb-4">
-              {retryCount === 0 ? 'Ready to start?' : 'Try again?'}
-            </h3>
-            <p className="text-white mb-6 text-center max-w-md">
-              Use arrow keys (↑, ↓, ←, →) to play. Complete the level within the time limit!
-            </p>
-            <Button 
-              onClick={startGame} 
-              size="lg" 
-              className="gradient-bg button-shadow"
-            >
-              {retryCount === 0 ? 'Start Game' : 'Retry'}
-            </Button>
+          <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/80 z-10 p-6">
+            {showGameInstructions ? (
+              <div className="max-w-md text-center">
+                <h2 className="text-2xl font-bold text-white mb-4">
+                  {getGameTitle()} - Level {levelId}
+                </h2>
+                <div className="mb-6">
+                  {getGameInstructions()}
+                </div>
+                <Button 
+                  onClick={() => setShowGameInstructions(false)} 
+                  size="lg" 
+                  className="gradient-bg button-shadow"
+                >
+                  I Understand
+                </Button>
+              </div>
+            ) : (
+              <div className="max-w-md text-center">
+                <h3 className="text-2xl font-bold text-white mb-4">
+                  {retryCount === 0 ? 'Ready to start?' : 'Try again?'}
+                </h3>
+                <p className="text-white mb-6 text-center">
+                  {retryCount > 0 && 'Don\'t worry, practice makes perfect! '}
+                  Complete the level within the time limit!
+                </p>
+                <Button 
+                  onClick={startGame} 
+                  size="lg" 
+                  className="gradient-bg button-shadow"
+                >
+                  {retryCount === 0 ? 'Start Game' : 'Retry'}
+                </Button>
+              </div>
+            )}
           </div>
         )}
         
         {gameCompleted && gameResult && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/70 z-10 p-6">
+          <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/80 z-10 p-6">
             <div className="animate-game-success mb-4">
               <div className="w-20 h-20 rounded-full bg-mindbloom-green flex items-center justify-center">
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" className="w-12 h-12 text-white">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                </svg>
+                <Trophy className="w-12 h-12 text-white" />
               </div>
             </div>
             <h3 className="text-3xl font-bold text-white mb-2">Great job!</h3>
             <p className="text-xl text-mindbloom-green mb-6">Level completed</p>
             
-            <div className="grid grid-cols-2 gap-4 mb-6 w-full max-w-xs">
-              <div className="bg-black/30 p-3 rounded-lg text-center">
-                <p className="text-white text-sm">Score</p>
+            <div className="grid grid-cols-3 gap-4 mb-6 w-full max-w-xs">
+              <div className="bg-black/40 p-3 rounded-lg text-center">
+                <p className="text-white text-sm flex items-center justify-center">
+                  <Trophy className="w-4 h-4 mr-1 text-yellow-500" />
+                  Score
+                </p>
                 <p className="text-2xl font-bold text-mindbloom-yellow">{gameResult.score}</p>
               </div>
-              <div className="bg-black/30 p-3 rounded-lg text-center">
-                <p className="text-white text-sm">Time</p>
+              <div className="bg-black/40 p-3 rounded-lg text-center">
+                <p className="text-white text-sm flex items-center justify-center">
+                  <Clock className="w-4 h-4 mr-1 text-blue-400" />
+                  Time
+                </p>
                 <p className="text-2xl font-bold text-mindbloom-blue">
                   {gameResult.completionTime.toFixed(1)}s
                 </p>
+              </div>
+              <div className="bg-black/40 p-3 rounded-lg text-center">
+                <p className="text-white text-sm flex items-center justify-center">
+                  <Target className="w-4 h-4 mr-1 text-purple-400" />
+                  Tries
+                </p>
+                <p className="text-2xl font-bold text-mindbloom-purple">
+                  {retryCount + 1}
+                </p>
+              </div>
+            </div>
+            
+            <div className="bg-black/30 p-4 rounded-lg mb-6 w-full max-w-sm">
+              <h4 className="text-white text-center font-medium mb-2 flex items-center justify-center">
+                <BarChart3 className="w-4 h-4 mr-1 text-mindbloom-purple" />
+                Emotion Analysis
+              </h4>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="flex items-center">
+                  <div className="w-full bg-gray-700 rounded-full h-2.5 mr-2">
+                    <div className="bg-green-500 h-2.5 rounded-full" style={{ width: `${gameResult.emotionScore.joy * 100}%` }}></div>
+                  </div>
+                  <span className="text-white text-xs w-8">Joy</span>
+                </div>
+                <div className="flex items-center">
+                  <div className="w-full bg-gray-700 rounded-full h-2.5 mr-2">
+                    <div className="bg-blue-500 h-2.5 rounded-full" style={{ width: `${gameResult.emotionScore.focus * 100}%` }}></div>
+                  </div>
+                  <span className="text-white text-xs w-8">Focus</span>
+                </div>
+                <div className="flex items-center">
+                  <div className="w-full bg-gray-700 rounded-full h-2.5 mr-2">
+                    <div className="bg-purple-500 h-2.5 rounded-full" style={{ width: `${gameResult.emotionScore.engagement * 100}%` }}></div>
+                  </div>
+                  <span className="text-white text-xs w-12">Engage</span>
+                </div>
+                <div className="flex items-center">
+                  <div className="w-full bg-gray-700 rounded-full h-2.5 mr-2">
+                    <div className="bg-orange-500 h-2.5 rounded-full" style={{ width: `${gameResult.emotionScore.frustration * 100}%` }}></div>
+                  </div>
+                  <span className="text-white text-xs w-8">Frust</span>
+                </div>
               </div>
             </div>
             

@@ -1,3 +1,4 @@
+
 // User types
 export interface User {
   id: string;
@@ -10,6 +11,7 @@ export interface User {
 export interface ChildUser extends User {
   parentId: string;
   avatarId: number;
+  avatarUrl?: string; // Added avatarUrl for image-based avatars
   streakDays: number;
   lastPlayDate?: string;
   username?: string; // Added username for child login
@@ -66,8 +68,28 @@ export interface LeaderboardEntry {
   childId: string;
   childName: string;
   avatarId: number;
+  avatarUrl?: string; // Added avatarUrl for image-based avatars
   score: number;
   rank: number;
+}
+
+// Achievement system
+export interface Achievement {
+  id: string;
+  title: string;
+  description: string;
+  icon: string;
+  unlockedAt?: string;
+  progress?: number;
+  maxProgress?: number;
+}
+
+export interface ChildAchievement {
+  childId: string;
+  achievementId: string;
+  unlockedAt: string;
+  progress: number;
+  maxProgress: number;
 }
 
 // Database responses
