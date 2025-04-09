@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import * as handPoseDetection from '@mediapipe/hands';
 import { Camera } from '@mediapipe/camera_utils';
 
+
 function HandTracker({ onDirectionChange }) {
   const canvasRef = useRef(null);
   const videoRef = useRef(null);
