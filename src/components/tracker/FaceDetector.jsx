@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import * as faceapi from 'face-api.js';
+import * as faceapi from '../../../public/models/face-api.min.js';
 import '../App.css'; 
 
 const FaceDetector = () => {

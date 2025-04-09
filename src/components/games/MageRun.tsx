@@ -1,17 +1,61 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import * as handPoseDetection from '@mediapipe/hands';
 import { Camera } from '@mediapipe/camera_utils';
+import * as faceapi from 'face-api.js';
+import { GameLevel } from '@/lib/types';
 
+interface MageRunProps {
+  level: GameLevel;
+  onGameOver: (score: number, success: boolean, emotion?: string) => void;
+  onReactionTime: (time: number) => void;
+}
 
-function HandTracker({ onDirectionChange }) {
-  const canvasRef = useRef(null);
-  const videoRef = useRef(null);
-  const lastPositionRef = useRef(null);
+interface MagePosition {
+  x: number;
+  y: number;
+}
 
+interface Obstacle {
+  id: number;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+const MageRun: React.FC<MageRunProps> = ({ level, onGameOver, onReactionTime }) => {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const [mage, setMage] = useState<MagePosition>({ x: 50, y: 250 });
+  const [obstacles, setObstacles] = useState<Obstacle[]>([]);
+  const [score, setScore] = useState(0);
+  const [timeLeft, setTimeLeft] = useState(level.timeLimit + 20);
+  const [gameActive, setGameActive] = useState(false);
+  const [gameOver, setGameOver] = useState(false);
+  const [win, setWin] = useState(false);
+  const [emotion, setEmotion] = useState<string | null>(null);
+  const lastPosition = useRef<MagePosition>({ x: 50, y: 250 });
+  const lastKeyPressTime = useRef<number | null>(null);
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const gameOverRef = useRef(false);
+  const detectedEmotions = useRef<Record<string, number>>({});
+
+  const gameSpeed = level.speed * 0.3;
+  const obstacleFrequency = Math.max(20 - (level.obstacles * 2), 10);
+
+  // Load face-api models
   useEffect(() => {
-    const canvas = canvasRef.current;
+    const loadModels = async () => {
+      await faceapi.nets.tinyFaceDetector.loadFromUri('/models');
+      await faceapi.nets.faceExpressionNet.loadFromUri('/models');
+    };
+    loadModels();
+  }, []);
+
+  // Setup video, hand tracking & emotion detection
+  useEffect(() => {
     const video = videoRef.current;
-    const ctx = canvas.getContext('2d');
+    if (!video) return;
 
     const hands = new handPoseDetection.Hands({
       locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`,
@@ -24,142 +68,264 @@ function HandTracker({ onDirectionChange }) {
       minTrackingConfidence: 0.7,
     });
 
-    hands.onResults((results) => {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      ctx.drawImage(results.image, 0, 0, canvas.width, canvas.height);
+    const processHandDetection = async () => {
+      await hands.send({ image: video });
+    };
 
-      if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
-        const landmarks = results.multiHandLandmarks[0];
-        const indexTip = landmarks[8];
-        const x = indexTip.x * canvas.width;
-        const y = indexTip.y * canvas.height;
-
-        if (lastPositionRef.current) {
-          const dx = x - lastPositionRef.current.x;
-          const dy = y - lastPositionRef.current.y;
-          const threshold = 20;
-
-          let direction = null;
-
-          if (Math.abs(dx) > Math.abs(dy)) {
-            direction = dx > threshold ? 'right' : dx < -threshold ? 'left' : null;
-          } else {
-            direction = dy > threshold ? 'down' : dy < -threshold ? 'up' : null;
-          }
-
-          if (direction && onDirectionChange) {
-            onDirectionChange(direction);
-          }
-        }
-
-        lastPositionRef.current = { x, y };
+    const processEmotionDetection = async () => {
+      const detections = await faceapi
+        .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions())
+        .withFaceExpressions();
+      if (detections?.expressions) {
+        const sorted = Object.entries(detections.expressions).sort((a, b) => b[1] - a[1]);
+        const topEmotion = sorted[0][0];
+        detectedEmotions.current[topEmotion] = (detectedEmotions.current[topEmotion] || 0) + 1;
+        setEmotion(topEmotion);
       }
-    });
+    };
 
     const camera = new Camera(video, {
       onFrame: async () => {
-        await hands.send({ image: video });
+        // Run both hand detection and emotion detection asynchronously
+        await Promise.all([processHandDetection(), processEmotionDetection()]);
       },
       width: 640,
       height: 480,
     });
+
+    hands.onResults((results) => {
+      if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+        const hand = results.multiHandLandmarks[0];
+        const indexFinger = hand[8];
+
+        // Invert the x-coordinate for mirrored behavior
+        const newX = Math.min(Math.max((1 - indexFinger.x) * 800, 20), 750);
+        const newY = Math.min(Math.max(indexFinger.y * 500, 20), 450);
+
+        // Detect movement direction
+        if (lastPosition.current.x < newX) {
+          console.log('Moving Right');
+        } else if (lastPosition.current.x > newX) {
+          console.log('Moving Left');
+        }
+
+        lastPosition.current = { x: newX, y: newY };
+        setMage({ x: newX, y: newY });
+
+        if (!gameActive && !gameOverRef.current) {
+          startGame();
+          const now = Date.now();
+          if (lastKeyPressTime.current) {
+            onReactionTime(now - lastKeyPressTime.current);
+          }
+          lastKeyPressTime.current = now;
+        }
+      } else {
+        // Keep the mage at the last known position if the hand is not detected
+        setMage(lastPosition.current);
+      }
+    });
+
     camera.start();
-  }, [onDirectionChange]);
 
-  return (
-    <div>
-      <video ref={videoRef} style={{ display: 'none' }}></video>
-      <canvas ref={canvasRef} width={640} height={480} style={{ border: '1px solid #ccc' }}></canvas>
-    </div>
-  );
-}
+    return () => {
+      hands.close();
+      camera.stop();
+    };
+  }, [gameActive]);
 
-export default function MageRun() {
-  const canvasRef = useRef(null);
-  const [mage, setMage] = useState({ x: 100, y: 100 });
-  const [obstacles, setObstacles] = useState([]);
-  const [score, setScore] = useState(0);
-  const [gameActive, setGameActive] = useState(false);
+  const startGame = () => {
+    setGameActive(true);
+    setScore(0);
+    setTimeLeft(level.timeLimit + 20);
+    setObstacles([]);
+    setGameOver(false);
+    setWin(false);
+  };
 
   useEffect(() => {
-    const ctx = canvasRef.current.getContext('2d');
+    const canvas = canvasRef.current;
+    const ctx = canvas?.getContext('2d');
+    if (!canvas || !ctx) return;
 
-    const draw = () => {
-      ctx.clearRect(0, 0, 800, 500);
-      ctx.fillStyle = 'blue';
-      ctx.beginPath();
-      ctx.arc(mage.x, mage.y, 20, 0, Math.PI * 2);
-      ctx.fill();
+    canvas.width = 800;
+    canvas.height = 500;
 
-      ctx.fillStyle = 'red';
-      obstacles.forEach((obs) => {
-        ctx.fillRect(obs.x, obs.y, obs.width, obs.height);
-      });
+    let animationId: number;
+    let obstacleInterval: NodeJS.Timeout;
 
-      ctx.fillStyle = 'black';
-      ctx.font = '20px Arial';
-      ctx.fillText(`Score: ${score}`, 10, 20);
-    };
+    if (gameActive) {
+      animationId = requestAnimationFrame(updateGame);
+      timerRef.current = setInterval(() => {
+        setTimeLeft((prev) => {
+          if (prev <= 1) {
+            clearInterval(timerRef.current!);
+            handleGameOver(false);
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
 
-    draw();
-  }, [mage, obstacles, score]);
+      obstacleInterval = setInterval(generateObstacle, 1000 / gameSpeed);
+
+      return () => {
+        cancelAnimationFrame(animationId);
+        clearInterval(timerRef.current!);
+        clearInterval(obstacleInterval);
+      };
+    }
+  }, [gameActive]);
 
   useEffect(() => {
     if (!gameActive) return;
 
-    const interval = setInterval(() => {
-      setObstacles((prev) => {
-        const newObs = prev
-          .map((obs) => ({ ...obs, x: obs.x - 5 }))
-          .filter((obs) => obs.x + obs.width > 0);
+    const mageRadius = 20;
 
-        if (Math.random() < 0.1) {
-          newObs.push({ x: 800, y: Math.random() * 460, width: 20, height: 40 });
-        }
+    for (const obstacle of obstacles) {
+      const mageLeft = mage.x - mageRadius;
+      const mageRight = mage.x + mageRadius;
+      const mageTop = mage.y - mageRadius;
+      const mageBottom = mage.y + mageRadius;
 
-        return newObs;
-      });
-
-      setScore((prev) => prev + 1);
-    }, 100);
-
-    return () => clearInterval(interval);
-  }, [gameActive]);
-
-  useEffect(() => {
-    for (const obs of obstacles) {
-      const dx = mage.x - (obs.x + obs.width / 2);
-      const dy = mage.y - (obs.y + obs.height / 2);
-      const distance = Math.sqrt(dx * dx + dy * dy);
-      if (distance < 30) {
-        setGameActive(false);
-        alert(`Game Over! Final Score: ${score}`);
+      if (
+        mageRight > obstacle.x &&
+        mageLeft < obstacle.x + obstacle.width &&
+        mageBottom > obstacle.y &&
+        mageTop < obstacle.y + obstacle.height
+      ) {
+        handleGameOver(false);
         return;
       }
     }
-  }, [mage, obstacles, score]);
 
-  const handleHandDirection = (direction) => {
-    if (!gameActive) setGameActive(true);
+    if (score >= 100) {
+      handleGameOver(true);
+    }
+  }, [mage, obstacles, gameActive, score]);
 
-    const move = 15;
-    setMage((prev) => {
-      let newX = prev.x;
-      let newY = prev.y;
+  const handleGameOver = (success: boolean) => {
+    if (timerRef.current) clearInterval(timerRef.current);
 
-      if (direction === 'up') newY = Math.max(20, prev.y - move);
-      if (direction === 'down') newY = Math.min(450, prev.y + move);
-      if (direction === 'left') newX = Math.max(20, prev.x - move);
-      if (direction === 'right') newX = Math.min(750, prev.x + move);
+    setGameActive(false);
+    setGameOver(true);
+    setWin(success);
 
-      return { x: newX, y: newY };
-    });
+    const finalEmotion = Object.entries(detectedEmotions.current).sort((a, b) => b[1] - a[1])[0]?.[0];
+    onGameOver(score, success, finalEmotion);
   };
+
+  const generateObstacle = useCallback(() => {
+    if (!gameActive) return;
+
+    const height = Math.floor(Math.random() * 150) + 50;
+    const y = Math.floor(Math.random() * (500 - height));
+
+    setObstacles((prev) => [
+      ...prev,
+      {
+        id: Date.now(),
+        x: 800,
+        y,
+        width: 30,
+        height,
+      },
+    ]);
+  }, [gameActive]);
+
+  const updateGame = useCallback(() => {
+    if (!gameActive || gameOverRef.current) return;
+
+    setObstacles((prev) =>
+      prev
+        .map((obstacle) => ({ ...obstacle, x: obstacle.x - (2 * gameSpeed) }))
+        .filter((obstacle) => obstacle.x + obstacle.width > 0)
+    );
+
+    setScore((prev) => Math.min(prev + 0.05, 100));
+    requestAnimationFrame(updateGame);
+  }, [gameActive, gameSpeed]);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas || gameOver) return;
+
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = '#222831';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    ctx.fillStyle = 'white';
+    ctx.font = '20px Arial';
+    ctx.fillText(`Score: ${Math.floor(score)}`, 20, 30);
+    ctx.fillText(`Time: ${timeLeft}s`, canvas.width - 120, 30);
+    if (emotion) ctx.fillText(`Emotion: ${emotion}`, canvas.width / 2 - 60, 30);
+
+    ctx.fillStyle = '#8B5CF6';
+    ctx.beginPath();
+    ctx.arc(mage.x, mage.y, 20, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = '#D946EF';
+    ctx.beginPath();
+    ctx.moveTo(mage.x, mage.y - 20);
+    ctx.lineTo(mage.x - 15, mage.y - 5);
+    ctx.lineTo(mage.x + 15, mage.y - 5);
+    ctx.fill();
+
+    ctx.fillStyle = '#F97316';
+    obstacles.forEach((obstacle) => {
+      ctx.fillRect(obstacle.x, obstacle.y, obstacle.width, obstacle.height);
+    });
+
+    const progressWidth = (score / 100) * canvas.width;
+    ctx.fillStyle = '#34D399';
+    ctx.fillRect(0, canvas.height - 10, progressWidth, 10);
+  }, [mage, obstacles, score, timeLeft, emotion, gameOver]);
 
   return (
     <div>
-      <canvas ref={canvasRef} width={800} height={500} style={{ border: '2px solid black' }} />
-      <HandTracker onDirectionChange={handleHandDirection} />
+      {!gameOver ? (
+        <canvas ref={canvasRef} className="w-full h-full block" />
+      ) : (
+        <div className="flex flex-col items-center justify-center h-full bg-black text-white">
+          <h1 className="text-4xl font-bold mb-4">{win ? '🎉 You Win! 🎉' : '💀 Game Over 💀'}</h1>
+          <p className="text-xl mb-2">Your Score: {Math.floor(score)}</p>
+          {emotion && <p className="text-lg mb-4">Dominant Emotion: {emotion}</p>}
+          <div className="space-x-4">
+            <button
+              className="px-6 py-3 bg-green-500 text-white font-bold rounded hover:bg-green-600"
+              onClick={() => window.location.reload()}
+            >
+              Retry
+            </button>
+            <button
+              className="px-6 py-3 bg-red-500 text-white font-bold rounded hover:bg-red-600"
+              onClick={() => alert('Return to Menu')}
+            >
+              Main Menu
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Popup window for the camera feed */}
+      <div
+        className="fixed bottom-4 right-4 bg-white border border-gray-300 shadow-lg rounded-lg p-2"
+        style={{ width: '400px', height: '300px' }} // Increased width and height
+        >
+        <video
+          ref={videoRef}
+          className="w-full h-full rounded"
+          autoPlay
+          playsInline
+          muted
+        />
+      </div>
     </div>
   );
-}
+};
+
+export default MageRun;
