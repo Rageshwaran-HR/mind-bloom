@@ -30,9 +30,11 @@ const MageRun: React.FC<MageRunProps> = ({ level, onGameOver, onReactionTime }) 
   const [gameOver, setGameOver] = useState(false);
   const [win, setWin] = useState(false);
   const [lastKeyPressTime, setLastKeyPressTime] = useState<number | null>(null);
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
 
   const gameSpeed = level.speed * 0.3; // Slower game speed
   const obstacleFrequency = Math.max(20 - (level.obstacles * 2), 10); // More frequent obstacles
+  const gameOverRef = useRef(false);
 
   // Start the game when the user presses an arrow key
   const startGame = () => {
@@ -62,16 +64,17 @@ const MageRun: React.FC<MageRunProps> = ({ level, onGameOver, onReactionTime }) 
       gameLoop = requestAnimationFrame(updateGame);
 
       // Start timer
-      const timer = setInterval(() => {
+      timerRef.current = setInterval(() => {
         setTimeLeft((prev) => {
           if (prev <= 1) {
-            clearInterval(timer);
+            clearInterval(timerRef.current!);
             handleGameOver(false);
             return 0;
           }
           return prev - 1;
         });
       }, 1000);
+      
 
       // Generate obstacles
       const obstacleGenerator = setInterval(() => {
@@ -80,7 +83,7 @@ const MageRun: React.FC<MageRunProps> = ({ level, onGameOver, onReactionTime }) 
 
       return () => {
         cancelAnimationFrame(gameLoop);
-        clearInterval(timer);
+        clearInterval(timerRef.current!);
         clearInterval(obstacleGenerator);
       };
     }
@@ -165,11 +168,20 @@ const MageRun: React.FC<MageRunProps> = ({ level, onGameOver, onReactionTime }) 
 
   // Handle game over or win
   const handleGameOver = (success: boolean) => {
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+  
+    gameOverRef.current = true; // <-- Add this line
+  
     setGameActive(false);
     setGameOver(true);
     setWin(success);
     onGameOver(score, success);
   };
+  
+  
 
   // Generate obstacle
   const generateObstacle = useCallback(() => {
@@ -191,69 +203,69 @@ const MageRun: React.FC<MageRunProps> = ({ level, onGameOver, onReactionTime }) 
 
   // Update game state
   const updateGame = useCallback(() => {
-    if (!gameActive) return;
-
+    if (!gameActive || gameOverRef.current) return; // Use the ref instead of state
+  
     setObstacles((prev) =>
       prev
         .map((obstacle) => ({
           ...obstacle,
-          x: obstacle.x - (2 * gameSpeed), // Slower obstacle movement
+          x: obstacle.x - (2 * gameSpeed),
         }))
         .filter((obstacle) => obstacle.x + obstacle.width > 0)
     );
-
-    setScore((prev) => Math.min(prev + 0.05, 100)); // Slower score increment
-
+  
+    setScore((prev) => Math.min(prev + 0.05, 100)); // No need to check gameOver here now
+  
     requestAnimationFrame(updateGame);
   }, [gameActive, gameSpeed]);
-
+  
   // Render game
   useEffect(() => {
     const canvas = canvasRef.current;
-    if (!canvas) return;
-
+    if (!canvas || gameOver) return; // prevent rendering if game is over
+  
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
-
+  
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-
+  
     // Draw background
     ctx.fillStyle = '#222831';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
-
+  
     // Draw score
     ctx.fillStyle = 'white';
     ctx.font = '20px Arial';
     ctx.fillText(`Score: ${Math.floor(score)}`, 20, 30);
-
+  
     // Draw time
     ctx.fillText(`Time: ${timeLeft}s`, canvas.width - 120, 30);
-
+  
     // Draw mage
     ctx.fillStyle = '#8B5CF6';
     ctx.beginPath();
     ctx.arc(mage.x, mage.y, 20, 0, Math.PI * 2);
     ctx.fill();
-
+  
     ctx.fillStyle = '#D946EF';
     ctx.beginPath();
     ctx.moveTo(mage.x, mage.y - 20);
     ctx.lineTo(mage.x - 15, mage.y - 5);
     ctx.lineTo(mage.x + 15, mage.y - 5);
     ctx.fill();
-
+  
     // Draw obstacles
     ctx.fillStyle = '#F97316';
     obstacles.forEach((obstacle) => {
       ctx.fillRect(obstacle.x, obstacle.y, obstacle.width, obstacle.height);
     });
-
+  
     // Draw progress bar
     const progressWidth = (score / 100) * canvas.width;
     ctx.fillStyle = '#34D399';
     ctx.fillRect(0, canvas.height - 10, progressWidth, 10);
-  }, [mage, obstacles, score, timeLeft]);
-
+  }, [mage, obstacles, score, timeLeft, gameOver]);
+  
   return (
     <div>
       {!gameOver && (
