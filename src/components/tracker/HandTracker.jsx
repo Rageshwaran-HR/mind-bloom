@@ -1,4 +1,5 @@
 import React, { useRef, useEffect, useState } from 'react';
+import HandTracker from '../components/tracker/HandTracker';
 
 function HandTracker() {
   const videoRef = useRef(null);
