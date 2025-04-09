@@ -39,11 +39,13 @@ const MageRun: React.FC<MageRunProps> = ({ level, onGameOver, onReactionTime }) 
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const gameOverRef = useRef(false);
   const detectedEmotions = useRef<Record<string, number>>({});
+  const emotionHistoryRef = useRef<number[][]>([]); // Use useRef to persist emotion history
+  const speedHistoryRef = useRef<number[]>([]); // Array to store speed values for each frame
+  const rangeHistoryRef = useRef<number[]>([]); // Array to store range values for each frame
+  const symmetryHistoryRef = useRef<number[]>([]); // Array to store symmetry values for each frame
 
   const gameSpeed = level.speed * 0.3;
-  const obstacleFrequency = Math.max(20 - (level.obstacles * 2), 10);
 
-  // Load face-api models
   useEffect(() => {
     const loadModels = async () => {
       await faceapi.nets.tinyFaceDetector.loadFromUri('/models');
@@ -52,7 +54,6 @@ const MageRun: React.FC<MageRunProps> = ({ level, onGameOver, onReactionTime }) 
     loadModels();
   }, []);
 
-  // Setup video, hand tracking & emotion detection
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
@@ -74,23 +75,35 @@ const MageRun: React.FC<MageRunProps> = ({ level, onGameOver, onReactionTime }) 
 
     const processEmotionDetection = async () => {
       const detections = await faceapi
-        .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions())
+        .detectSingleFace(videoRef.current!, new faceapi.TinyFaceDetectorOptions())
         .withFaceExpressions();
       if (detections?.expressions) {
         const sorted = Object.entries(detections.expressions).sort((a, b) => b[1] - a[1]);
         const topEmotion = sorted[0][0];
         detectedEmotions.current[topEmotion] = (detectedEmotions.current[topEmotion] || 0) + 1;
         setEmotion(topEmotion);
+
+        // Store the emotion probabilities in the history array
+        const probabilities = Object.values(detections.expressions);
+        emotionHistoryRef.current.push(probabilities); // Push to the ref array
+
+        // Simulate values for speed, range, and symmetry for each frame
+        const simulatedSpeed = Math.random() * (0.9 - 0.5) + 0.5; // Random value between 0.5 and 0.9
+        const simulatedRange = Math.random() * (0.9 - 0.5) + 0.5; // Random value between 0.5 and 0.9
+        const simulatedSymmetry = Math.random() * (0.9 - 0.5) + 0.5; // Random value between 0.5 and 0.9
+
+        speedHistoryRef.current.push(simulatedSpeed);
+        rangeHistoryRef.current.push(simulatedRange);
+        symmetryHistoryRef.current.push(simulatedSymmetry);
       }
     };
 
     const camera = new Camera(video, {
       onFrame: async () => {
-        // Run both hand detection and emotion detection asynchronously
         await Promise.all([processHandDetection(), processEmotionDetection()]);
       },
-      width: 640,
-      height: 480,
+      width: 800,
+      height: 500,
     });
 
     hands.onResults((results) => {
@@ -98,16 +111,8 @@ const MageRun: React.FC<MageRunProps> = ({ level, onGameOver, onReactionTime }) 
         const hand = results.multiHandLandmarks[0];
         const indexFinger = hand[8];
 
-        // Invert the x-coordinate for mirrored behavior
         const newX = Math.min(Math.max((1 - indexFinger.x) * 800, 20), 750);
         const newY = Math.min(Math.max(indexFinger.y * 500, 20), 450);
-
-        // Detect movement direction
-        if (lastPosition.current.x < newX) {
-          console.log('Moving Right');
-        } else if (lastPosition.current.x > newX) {
-          console.log('Moving Left');
-        }
 
         lastPosition.current = { x: newX, y: newY };
         setMage({ x: newX, y: newY });
@@ -121,7 +126,6 @@ const MageRun: React.FC<MageRunProps> = ({ level, onGameOver, onReactionTime }) 
           lastKeyPressTime.current = now;
         }
       } else {
-        // Keep the mage at the last known position if the hand is not detected
         setMage(lastPosition.current);
       }
     });
@@ -213,6 +217,12 @@ const MageRun: React.FC<MageRunProps> = ({ level, onGameOver, onReactionTime }) 
 
     const finalEmotion = Object.entries(detectedEmotions.current).sort((a, b) => b[1] - a[1])[0]?.[0];
     onGameOver(score, success, finalEmotion);
+
+    // Log the emotion history and other arrays at the end of the game
+    console.log('Emotion History:', emotionHistoryRef.current); // Log the emotion history
+    console.log('Speed History:', speedHistoryRef.current); // Log the speed history
+    console.log('Range History:', rangeHistoryRef.current); // Log the range history
+    console.log('Symmetry History:', symmetryHistoryRef.current); // Log the symmetry history
   };
 
   const generateObstacle = useCallback(() => {
@@ -254,8 +264,8 @@ const MageRun: React.FC<MageRunProps> = ({ level, onGameOver, onReactionTime }) 
     if (!ctx) return;
 
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.fillStyle = '#222831';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = 'transparent';
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
 
     ctx.fillStyle = 'white';
     ctx.font = '20px Arial';
@@ -286,11 +296,25 @@ const MageRun: React.FC<MageRunProps> = ({ level, onGameOver, onReactionTime }) 
   }, [mage, obstacles, score, timeLeft, emotion, gameOver]);
 
   return (
-    <div>
-      {!gameOver ? (
-        <canvas ref={canvasRef} className="w-full h-full block" />
-      ) : (
-        <div className="flex flex-col items-center justify-center h-full bg-black text-white">
+    <div className="relative w-full h-screen overflow-hidden">
+      {/* Background webcam feed */}
+      <video
+        ref={videoRef}
+        className="absolute top-0 left-0 w-full h-full object-cover z-0"
+        autoPlay
+        playsInline
+        muted
+      />
+
+      {/* Game canvas */}
+      <canvas
+        ref={canvasRef}
+        className="absolute top-0 left-0 w-full h-full z-10"
+      />
+
+      {/* Game over screen */}
+      {gameOver && (
+        <div className="absolute top-0 left-0 w-full h-full bg-black bg-opacity-70 z-20 flex flex-col items-center justify-center text-white">
           <h1 className="text-4xl font-bold mb-4">{win ? '🎉 You Win! 🎉' : '💀 Game Over 💀'}</h1>
           <p className="text-xl mb-2">Your Score: {Math.floor(score)}</p>
           {emotion && <p className="text-lg mb-4">Dominant Emotion: {emotion}</p>}
@@ -310,20 +334,6 @@ const MageRun: React.FC<MageRunProps> = ({ level, onGameOver, onReactionTime }) 
           </div>
         </div>
       )}
-
-      {/* Popup window for the camera feed */}
-      <div
-        className="fixed bottom-4 right-4 bg-white border border-gray-300 shadow-lg rounded-lg p-2"
-        style={{ width: '400px', height: '300px' }} // Increased width and height
-        >
-        <video
-          ref={videoRef}
-          className="w-full h-full rounded"
-          autoPlay
-          playsInline
-          muted
-        />
-      </div>
     </div>
   );
 };

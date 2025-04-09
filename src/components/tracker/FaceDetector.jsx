@@ -1,20 +1,12 @@
 import React, { useEffect, useRef, useState } from 'react';
-import * as faceapi from '../../../public/models/face-api.min.js';
-import '../App.css'; 
+import * as faceapi from 'face-api.js';
+import '../App.css';
 
 const FaceDetector = () => {
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
 
-  const [dominantEmotion, setDominantEmotion] = useState('');
-  const [emotionConfidence, setEmotionConfidence] = useState(0);
-  const [expressionChanges, setExpressionChanges] = useState(0);
-  const [microExpressionCount, setMicroExpressionCount] = useState(0);
-  const [noFaceCount, setNoFaceCount] = useState(0);
-
-  const lastEmotionRef = useRef('');
-  const lastConfidenceRef = useRef(0);
-  const emotionHistory = useRef([]);
+  const [expressionsData, setExpressionsData] = useState({});
 
   useEffect(() => {
     const startVideo = async () => {
@@ -62,25 +54,8 @@ const FaceDetector = () => {
 
           if (resized.length > 0) {
             const expressions = resized[0].expressions;
-            const sorted = Object.entries(expressions).sort((a, b) => b[1] - a[1]);
-            const [topEmotion, confidence] = sorted[0];
-
-            setDominantEmotion(topEmotion);
-            setEmotionConfidence(confidence.toFixed(2));
-            emotionHistory.current.push(topEmotion);
-
-            if (lastEmotionRef.current !== topEmotion) {
-              setExpressionChanges(prev => prev + 1);
-              lastEmotionRef.current = topEmotion;
-            }
-
-            if (Math.abs(confidence - lastConfidenceRef.current) > 0.4) {
-              setMicroExpressionCount(prev => prev + 1);
-            }
-
-            lastConfidenceRef.current = confidence;
-          } else {
-            setNoFaceCount(prev => prev + 1);
+            setExpressionsData(expressions); // store full expressions object
+            console.log(JSON.stringify(expressions)); // print in console
           }
         }
       }, 300);
@@ -92,13 +67,8 @@ const FaceDetector = () => {
       startVideo();
       const intervalId = detectFace();
 
-      const expressionResetInterval = setInterval(() => {
-        setExpressionChanges(0);
-      }, 10000);
-
       return () => {
         clearInterval(intervalId);
-        clearInterval(expressionResetInterval);
       };
     });
   }, []);
@@ -118,17 +88,25 @@ const FaceDetector = () => {
           className="face-canvas"
         />
       </div>
-  
+
       <div className="face-metrics">
-        <p>🎭 Dominant Emotion: {dominantEmotion}</p>
-        <p>📈 Confidence: {emotionConfidence}</p>
-        <p>🔄 Expression Changes (10s): {expressionChanges}</p>
-        <p>⚡ Microexpressions: {microExpressionCount}</p>
-        <p>🙈 Face Lost Count: {noFaceCount}</p>
+        <p className="whitespace-pre-wrap text-white text-sm bg-gray-800 p-4 rounded shadow-md">
+          {Object.keys(expressionsData).length > 0
+            ? JSON.stringify(
+                Object.fromEntries(
+                  Object.entries(expressionsData).map(([key, val]) => [
+                    key,
+                    +val.toFixed(4),
+                  ])
+                ),
+                null,
+                2
+              )
+            : 'No expression data yet.'}
+        </p>
       </div>
     </div>
   );
-  
 };
 
 export default FaceDetector;

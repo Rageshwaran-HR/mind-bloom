@@ -1,5 +1,4 @@
 import React, { useRef, useEffect, useState } from 'react';
-import HandTracker from '../components/tracker/HandTracker';
 
 function HandTracker() {
   const videoRef = useRef(null);
@@ -90,22 +89,22 @@ function HandTracker() {
         lastTimestampRef.current = now;
 
         // === Calculate Gesture Symmetry ===
-        // We'll compare how symmetric the spread between fingers is
         const fingerIndices = [4, 8, 12, 16, 20]; // Thumb to pinky
         const palm = landmarks[0];
         const fingerDistances = fingerIndices.map((i) =>
           calculateDistance(palm, landmarks[i])
         );
-        const mean = fingerDistances.reduce((a, b) => a + b) / fingerDistances.length;
+        const mean =
+          fingerDistances.reduce((a, b) => a + b, 0) / fingerDistances.length;
         const variance =
           fingerDistances.reduce((sum, d) => sum + Math.pow(d - mean, 2), 0) /
           fingerDistances.length;
         const symmetryScore = 1 / (1 + variance); // Closer to 1 = more symmetric
 
         setMetrics({
-          hand_movement_range: movementRange.toFixed(2),
-          hand_movement_speed: movementSpeed.toFixed(2),
-          gesture_symmetry: symmetryScore.toFixed(2),
+          hand_movement_range: +movementRange.toFixed(2),
+          hand_movement_speed: +movementSpeed.toFixed(2),
+          gesture_symmetry: +symmetryScore.toFixed(2),
         });
       }
     };
@@ -129,10 +128,10 @@ function HandTracker() {
           height: 150,
           border: '2px solid white',
           borderRadius: 8,
-          zIndex: 2
+          zIndex: 2,
         }}
       />
-  
+
       {/* Canvas overlay for landmarks */}
       <canvas
         ref={canvasRef}
@@ -143,31 +142,29 @@ function HandTracker() {
           top: 10,
           right: 10,
           zIndex: 3,
-          pointerEvents: 'none'
+          pointerEvents: 'none',
         }}
       />
-  
-      {/* Metrics box below video */}
-      <div style={{
-        position: 'absolute',
-        top: 170, // 10 (margin) + 150 (video height) + 10 (spacing)
-        right: 10,
-        width: 200,
-        color: 'white',
-        background: 'rgba(0, 0, 0, 0.7)',
-        padding: 10,
-        borderRadius: 8,
-        fontSize: 13,
-        zIndex: 4
-      }}>
-        <p>✋ Range: {metrics.hand_movement_range} px</p>
-        <p>🚀 Speed: {metrics.hand_movement_speed} px/sec</p>
-        <p>🔁 Symmetry: {metrics.gesture_symmetry}</p>
+
+      {/* JSON Metrics Box */}
+      <div
+        className="hand-metrics"
+        style={{
+          position: 'absolute',
+          top: 170,
+          right: 10,
+          width: 200,
+          zIndex: 4,
+        }}
+      >
+        <p className="whitespace-pre-wrap text-white text-sm bg-gray-800 p-4 rounded shadow-md">
+          {Object.keys(metrics).length > 0
+            ? JSON.stringify(metrics, null, 2)
+            : 'No hand movement data yet.'}
+        </p>
       </div>
     </div>
   );
-  
-
 }
 
 export default HandTracker;

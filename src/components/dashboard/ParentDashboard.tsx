@@ -7,13 +7,137 @@ import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { ChildUser, EmotionScore } from '@/lib/types';
 import { toast } from '@/lib/toast';
-import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, PieChart, Pie, Cell, RadarChart, PolarGrid, PolarAngleAxis, Radar } from 'recharts';
+import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, PieChart, Pie, Cell, RadarChart, PolarGrid, PolarAngleAxis, Radar, LineChart, Line } from 'recharts';
 import ChildRegistrationForm from '../auth/ChildRegistrationForm';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { InfoIcon, Brain, Zap, Smile, Activity, AlertCircle } from 'lucide-react';
 import EmotionTrends from './EmotionTrends';
 import EmotionCards from './EmotionCards';
 import ActivityLog from './ActivityLog';
+
+const fetchChildren = async (parentId: string) => {
+  try {
+    const { data, error } = await supabase
+      .from('children')
+      .select('*')
+      .eq('parent_id', parentId);
+
+    if (error) {
+      console.error('Error fetching children:', error);
+      toast.error('Failed to load children data');
+      return [];
+    }
+
+    return data;
+  } catch (error) {
+    console.error('Unexpected error fetching children:', error);
+    toast.error('An unexpected error occurred');
+    return [];
+  }
+};
+
+const todaysHighlightsData = [
+  { name: 'Emotional Stability', value: 75, color: '#34D399' },
+  { name: 'Emotional State', value: 75, color: '#8B5CF6' },
+  { name: 'Attention Span', value: 75, color: '#0EA5E9' },
+  { name: 'Resilience Score', value: 75, color: '#F97316' },
+];
+
+const weeklyHighlightsData = [
+  { date: '2025-04-01', EmotionalStability: 70, EmotionalState: 75, AttentionSpan: 80, ResilienceScore: 85 },
+  { date: '2025-04-02', EmotionalStability: 72, EmotionalState: 78, AttentionSpan: 82, ResilienceScore: 83 },
+  { date: '2025-04-03', EmotionalStability: 74, EmotionalState: 76, AttentionSpan: 79, ResilienceScore: 84 },
+  { date: '2025-04-04', EmotionalStability: 75, EmotionalState: 77, AttentionSpan: 81, ResilienceScore: 86 },
+  { date: '2025-04-05', EmotionalStability: 73, EmotionalState: 74, AttentionSpan: 78, ResilienceScore: 82 },
+  { date: '2025-04-06', EmotionalStability: 76, EmotionalState: 79, AttentionSpan: 83, ResilienceScore: 87 },
+  { date: '2025-04-07', EmotionalStability: 78, EmotionalState: 80, AttentionSpan: 85, ResilienceScore: 88 },
+];
+
+const renderTodaysHighlights = () => (
+  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+    <DonutChart
+      data={{ name: 'Emotional Stability', value: 75, color: '#34D399' }}
+      title="Emotional Stability"
+    />
+    <DonutChart
+      data={{ name: 'Focus', value: 75, color: '#0EA5E9' }}
+      title="Focus"
+    />
+    <DonutChart
+      data={{ name: 'Motor Engagememnt', value: 75, color: '#F97316' }}
+      title="Motor Engagememnt"
+    />
+  </div>
+);
+
+const DonutChart = ({ data, title }: { data: { name: string; value: number; color: string }; title: string }) => {
+  const chartData = [
+    { name: data.name, value: data.value, color: data.color },
+    { name: 'Remaining', value: 100 - data.value, color: '#E5E7EB' }, // Gray for remaining percentage
+  ];
+
+  return (
+    <Card className="mb-6">
+      <CardHeader>
+        <CardTitle className="text-lg">{title}</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="h-[200px]">
+          <ResponsiveContainer width="100%" height="100%">
+            <PieChart>
+              <Pie
+                data={chartData}
+                cx="50%"
+                cy="50%"
+                innerRadius={50}
+                outerRadius={70}
+                dataKey="value"
+                label={({ percent }) => `${(percent * 100).toFixed(0)}%`}
+              >
+                {chartData.map((entry, index) => (
+                  <Cell key={`cell-${index}`} fill={entry.color} />
+                ))}
+              </Pie>
+              <Tooltip formatter={(value: number) => [`${value}%`, '']} />
+            </PieChart>
+          </ResponsiveContainer>
+        </div>
+      </CardContent>
+    </Card>
+  );
+};
+
+const WeeklyLineChart = () => {
+  return (
+    <Card className="mb-6">
+      <CardHeader>
+        <CardTitle className="text-lg">Weekly Highlights</CardTitle>
+        <CardDescription>Trends over the past 7 days</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div className="h-[300px]">
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart data={weeklyHighlightsData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
+              <XAxis
+                dataKey="date"
+                tickFormatter={(date) => new Date(date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                tick={{ fontSize: 12 }}
+              />
+              <YAxis domain={[0, 100]} tick={{ fontSize: 12 }} tickFormatter={(value) => `${value}%`} />
+              <Tooltip formatter={(value: number) => [`${value}%`, '']} labelFormatter={(date) => new Date(date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} />
+              <Legend />
+              <Line type="monotone" dataKey="EmotionalStability" stroke="#34D399" name="Emotional Stability" />
+              <Line type="monotone" dataKey="EmotionalState" stroke="#8B5CF6" name="Emotional State" />
+              <Line type="monotone" dataKey="AttentionSpan" stroke="#0EA5E9" name="Attention Span" />
+              <Line type="monotone" dataKey="ResilienceScore" stroke="#F97316" name="Resilience Score" />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      </CardContent>
+    </Card>
+  );
+};
 
 interface EmotionTrend {
   date: string;
@@ -71,6 +195,23 @@ const ParentDashboard: React.FC = () => {
   
   const { parentUser, childUser, switchToChild } = useAuth();
   
+  useEffect(() => {
+    const loadChildren = async () => {
+      if (!parentUser) return;
+
+      try {
+        const childrenData = await fetchChildren(parentUser.id);
+        if (childrenData) {
+          parentUser.children = childrenData; // Assuming `parentUser` has a `children` property
+        }
+      } catch (error) {
+        console.error('Error loading children:', error);
+      }
+    };
+
+    loadChildren();
+  }, [parentUser]);
+
   useEffect(() => {
     if (!parentUser) return;
     
@@ -358,13 +499,13 @@ const ParentDashboard: React.FC = () => {
             <CardDescription>Select a child to view insights</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            {parentUser && parentUser.children.length > 0 ? (
-              parentUser.children.map(child => (
-                <div 
-                  key={child.id} 
+            {parentUser && parentUser.children && parentUser.children.length > 0 ? (
+              parentUser.children.map((child) => (
+                <div
+                  key={child.id}
                   className={`p-4 rounded-lg cursor-pointer transition-colors ${
-                    selectedChildId === child.id 
-                      ? 'bg-mindbloom-purple text-white' 
+                    selectedChildId === child.id
+                      ? 'bg-mindbloom-purple text-white'
                       : 'bg-muted hover:bg-muted/80'
                   }`}
                   onClick={() => handleChildSelect(child.id)}
@@ -376,25 +517,15 @@ const ParentDashboard: React.FC = () => {
                         selectedChildId === child.id
                           ? 'bg-white text-mindbloom-purple'
                           : 'bg-mindbloom-purple text-white'
-                      }`}>{child.avatarId}</AvatarFallback>
+                      }`}>
+                        {child.name.charAt(0).toUpperCase()}
+                      </AvatarFallback>
                     </Avatar>
                     <span className="font-medium">{child.name}</span>
                   </div>
                   <div className="flex justify-between text-sm">
                     <span className={`${selectedChildId === child.id ? 'text-white/80' : 'text-muted-foreground'}`}>
-                      {child.streakDays} day streak
                     </span>
-                    <Button 
-                      size="sm" 
-                      variant={selectedChildId === child.id ? "secondary" : "outline"} 
-                      className="h-7 text-xs"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleSwitchToChild(child.id);
-                      }}
-                    >
-                      Switch to
-                    </Button>
                   </div>
                 </div>
               ))
@@ -435,6 +566,8 @@ const ParentDashboard: React.FC = () => {
             <CardDescription>Mental health insights and trends</CardDescription>
           </CardHeader>
           <CardContent>
+            {renderTodaysHighlights()}
+            <WeeklyLineChart />
             {selectedChildId ? (
               <>
                 {emotionTrends.length > 0 ? (
